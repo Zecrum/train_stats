@@ -74,14 +74,14 @@ Les trains collectés sont insérés en base avec le statut `pending`.
 
 Un second cron tourne **toutes les minutes** et interroge la base pour trouver les trains éligibles :
 
-```
+```sql
 SELECT * FROM trains
 WHERE status = 'pending'
 AND departureTime <= NOW() - INTERVAL 5 MINUTE
 AND (nextRetryAt IS NULL OR nextRetryAt <= NOW())
 ```
 
-Pour chaque train trouvé, un appel est effectué sur `/equipment/:trainNumber/:date`.
+Pour chaque train trouvé, un appel est effectué sur `/api/transilien/equipment/:trainNumber/:date`.
 
 **Stratégie de retry :**
 
@@ -131,11 +131,16 @@ Pour chaque train trouvé, un appel est effectué sur `/equipment/:trainNumber/:
 
 ```
 transilien_stats/
-├── config.js          # URL API Transilien, credentials MySQL, codes IDFM, missions
-├── db.js              # Connexion MySQL et requêtes
-├── collector.js       # Appels API Transilien (timetable + equipment)
-├── scheduler.js       # Cron de collecte composition (toutes les minutes)
-├── index.js           # Point d'entrée + cron 4h30
+├── .env                # Variables d'environnement (ne pas commiter)
+├── .env.example        # Template à commiter
+├── config.js           # Paramètres (lit le .env)
+├── db.js               # Connexion MySQL et requêtes
+├── collector.js        # Appels HTTP vers l'API Transilien
+├── scheduler.js        # Cron de collecte composition (toutes les minutes)
+├── logger.js           # Logger console + fichier
+├── collect-now.js      # Collecte timetable manuelle (hors cron)
+├── index.js            # Point d'entrée + cron 4h30
+├── logs/               # Logs journaliers (ignoré par git)
 └── package.json
 ```
 
@@ -143,36 +148,21 @@ transilien_stats/
 
 ## Configuration
 
-Le fichier `config.js` centralise tous les paramètres :
+Copier `.env.example` en `.env` et remplir les valeurs :
 
-```js
-module.exports = {
-  api: {
-    baseUrl: 'http://localhost:PORT', // URL de l'API Transilien locale
-  },
-  db: {
-    host: 'localhost',
-    user: 'xxx',
-    password: 'xxx',
-    database: 'rer_e_stats',
-  },
-  timetable: [
-    { label: 'Chelles → Nanterre',  departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['NOCY'] },
-    { label: 'Nanterre → Chelles',  departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['CONY'] },
-    { label: 'Tournan → Nanterre',  departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['NATU', 'NUTU'] },
-    { label: 'Nanterre → Tournan',  departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['TANU', 'TINU'] },
-    { label: 'Villiers → Nanterre', departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['NOVY'] },
-    { label: 'Nanterre → Villiers', departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['VONY'] },
-    { label: 'Noisy → Nanterre',    departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['NOMY'] },
-    { label: 'Nanterre → Noisy',    departure: 'stop_area:IDFM:XXXXX', destination: 'stop_area:IDFM:XXXXX', missions: ['MONY'] },
-  ],
-  scheduler: {
-    delayAfterDeparture: 5,   // minutes après le départ avant 1er appel
-    retryDelays: [10, 10],    // délais en minutes entre les retries
-    callSpacing: 2000,        // ms entre chaque appel API
-  },
-};
+```env
+API_BASE_URL=http://localhost:3050
+API_KEY=ta_clé_api
+
+DB_HOST=localhost
+DB_USER=
+DB_PASSWORD=
+DB_NAME=rer_e_stats
 ```
+
+L'authentification sur l'API Transilien se fait via le header `X-API-Key`.
+
+La base de données et la table `trains` sont créées automatiquement au démarrage si elles n'existent pas. L'utilisateur MySQL doit avoir les droits `ALL PRIVILEGES` sur la base.
 
 ---
 
@@ -184,7 +174,8 @@ module.exports = {
 | Scheduler | node-cron |
 | Base de données | MySQL |
 | Driver MySQL | mysql2 |
-| HTTP client | node-fetch ou axios |
+| HTTP client | axios |
+| Variables d'env | dotenv |
 
 ---
 
@@ -195,11 +186,30 @@ npm install
 node index.js
 ```
 
+La collecte timetable se déclenche automatiquement à **4h30**. Pour lancer une collecte manuellement (test ou rattrapage) :
+
+```bash
+node collect-now.js
+```
+
 > En production, utiliser **PM2** pour maintenir le processus actif :
 > ```bash
 > pm2 start index.js --name transilien_stats
 > pm2 save
 > ```
+
+---
+
+## Logs
+
+Les logs sont écrits simultanément dans la console et dans `logs/YYYY-MM-DD.log` (un fichier par jour).
+
+```
+[2026-06-01 04:30:00] [INFO ] TIMETABLE | Début de la collecte pour le 2026-06-01
+[2026-06-01 09:12:01] [INFO ] APPEL API | 119002 | 2026-06-01 | mission NOVY
+[2026-06-01 09:12:02] [OK   ] OK        | 119002 | 2026-06-01 | RER NG (6C) + RER NG (6C)
+[2026-06-01 09:14:00] [WARN ] RETRY 1   | 119108 | 2026-06-01 | prochain dans 10 min
+```
 
 ---
 
