@@ -213,3 +213,32 @@ body { background: #0d1117; }
 .db-chartbox { position: relative; height: 320px; width: 100%; }
 .db-chartbox canvas { max-width: 100%; }
 .db-foot-note { font-size: 11px; color: var(--faint); font-family: "IBM Plex Mono", monospace; margin-top: 14px; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .db-shell     { padding: 16px 16px 40px; }
+  .db-branchgrid { grid-template-columns: 1fr; }
+  .db-chartbox  { height: 260px; }
+  .db-stat-v    { font-size: 26px; }
+  .db-metrics   { gap: 18px; padding: 14px 18px; }
+  .db-evo-stat .db-evo-v { font-size: 22px; }
+}
+
+@media (max-width: 480px) {
+  .db-shell     { padding: 12px 12px 32px; }
+  .db-row2      { grid-template-columns: 1fr; }
+  .db-tabs      { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .db-tabs::-webkit-scrollbar { display: none; }
+  .db-tab       { white-space: nowrap; padding: 8px 10px; font-size: 12px; gap: 6px; }
+  .db-donutwrap { flex-wrap: wrap; justify-content: center; }
+  .db-stat-v    { font-size: 22px; }
+  .db-branch-total { font-size: 20px; }
+  .db-metrics   { gap: 14px; padding: 12px 14px; }
+  .db-chartbox  { height: 200px; }
+  .db-evo-stat .db-evo-v { font-size: 18px; }
+  .db-legendrow { gap: 10px; }
+  .db-period button { padding: 4px 8px; font-size: 11px; }
+  .db-evo-stats { gap: 16px; }
+  .db-branch-name { font-size: 13px; }
+  .db-foot-note { word-break: break-all; }
+}

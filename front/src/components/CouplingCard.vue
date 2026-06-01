@@ -71,4 +71,8 @@ const options = computed(() => ({
 }
 .db-donut-big { font-family: "IBM Plex Mono", monospace; font-size: 30px; font-weight: 600; color: var(--text); }
 .db-donut-small { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 1px; color: var(--faint); }
+@media (max-width: 480px) {
+  .db-donut-canvas { width: 120px; height: 120px; }
+  .db-donut-big { font-size: 24px; }
+}
 </style>
