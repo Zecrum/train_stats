@@ -1,12 +1,6 @@
-# RER E Stats — Dashboard
+# Transilien Stats
 
-Interface web de visualisation des statistiques de composition du matériel roulant du RER E, alimentée par l'API REST du collecteur Transilien.
-
----
-
-## Objectif
-
-Visualiser les données collectées chaque jour par le système de collecte automatique afin d'analyser la répartition du matériel roulant (RER NG, NAT, MI2N) sur la ligne RER E, par branche et dans le temps.
+Interface web de visualisation des statistiques de composition du matériel roulant du RER E, alimentée par une API REST Node.js connectée à la base MySQL du collecteur Transilien.
 
 ---
 
@@ -38,16 +32,17 @@ Visualiser les données collectées chaque jour par le système de collecte auto
 ## Fonctionnalités
 
 ### Sélecteur de date
-Toutes les vues sont filtrables par date. Par défaut : jour courant.
+Toutes les vues sont filtrables par date (calendrier ou flèches jour-par-jour). Par défaut : jour courant.
 
 ### Vue "Jour J"
 
 | Bloc | Description |
 |------|-------------|
-| Circulations collectées | Total du jour, dont résolues et inconnues |
-| Répartition matériel | % RER NG / NAT / MI2N (1 circulation = 1 unité) |
-| Composition | % trains couplés (UM) vs simples (US) |
-| Détail par branche | Même répartition filtrée par branche |
+| Circulations collectées | Trains ayant fait l'objet d'une tentative de collecte (ok + unknown), en attente si `pending > 0` |
+| Taux de résolution | `résolues / collectées` — exclut les trains pas encore passés |
+| Répartition matériel | Donut RER NG / NAT / MI2N avec légende |
+| Composition UM/US | Donut couplées vs simples |
+| Détail par branche | Barre horizontale de répartition matériel + couplage, pour chacune des 4 branches |
 
 **Branches couvertes :**
 
@@ -58,12 +53,19 @@ Toutes les vues sont filtrables par date. Par défaut : jour courant.
 | Villiers-sur-Marne | `NOVY`, `VONY` |
 | Tronçon central | `NOMY`, `MONY` |
 
+### Vue "Répartition horaire"
+
+Courbes RER NG / NAT / MI2N par heure de départ (status = ok).  
+Un sélecteur de branche permet de filtrer les données : **Toutes / Chelles / Tournan / Villiers / Central**.
+
 ### Vue "Évolution"
 
-Courbes journalières sur une période paramétrable (7 j / 30 j / 90 j) :
+Courbes journalières sur une période glissante paramétrable (7 j / 30 j / 90 j) :
 
 - % de circulations RER NG par jour
-- % de compositions couplées par jour
+- % de circulations NAT par jour
+- % de circulations MI2N par jour
+- % de compositions couplées (UM) par jour
 
 ---
 
@@ -71,92 +73,90 @@ Courbes journalières sur une période paramétrable (7 j / 30 j / 90 j) :
 
 Un train couplé compte comme **une seule circulation**. Le matériel est déterminé par le `commercialName` du premier élément du tableau `composition`. Il n'y a pas de couplage hétérogène sur le RER E.
 
-```
-composition: [
-  { "commercialName": "RER NG", ... },
-  { "commercialName": "RER NG", ... }
-]
-→ 1 circulation RER NG couplée (UM)
+Les `commercialName` reconnus :
 
-composition: [
-  { "commercialName": "NAT", ... }
-]
-→ 1 circulation NAT simple (US)
-```
+| Valeur en base | Clé dans l'API |
+|----------------|----------------|
+| `RER NG` | `RERNG` |
+| `NAT` | `NAT` |
+| `Francilien` | `NAT` (alias) |
+| `MI2N` | `MI2N` |
 
 ---
 
 ## API REST
 
-Le dashboard consomme deux endpoints exposés par le serveur Node.js :
+Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 
 ### `GET /api/stats/daily`
-
-Retourne les statistiques globales et par branche pour une date donnée.
-
-**Paramètres :**
 
 | Paramètre | Type | Défaut | Description |
 |-----------|------|--------|-------------|
 | `date` | `YYYY-MM-DD` | aujourd'hui | Date de circulation |
 
-**Réponse :**
-
 ```json
 {
   "date": "2026-06-01",
-  "total": 284,
-  "resolved": 275,
-  "unknown": 9,
-  "material": {
-    "RERNG": 173,
-    "NAT": 82,
-    "MI2N": 29
-  },
-  "coupling": {
-    "um": 221,
-    "us": 63
-  },
+  "total": 416,
+  "collected": 199,
+  "resolved": 189,
+  "unknown": 10,
+  "pending": 217,
+  "material": { "RERNG": 120, "NAT": 45, "MI2N": 24 },
+  "coupling": { "um": 160, "us": 39 },
   "branches": {
     "Chelles": {
-      "total": 89,
-      "material": { "RERNG": 62, "NAT": 27, "MI2N": 0 },
-      "coupling": { "um": 74, "us": 15 }
+      "label": "Chelles–Gournay",
+      "missions": "NOCY · CONY",
+      "total": 52,
+      "material": { "RERNG": 36, "NAT": 12, "MI2N": 4 },
+      "coupling": { "um": 44, "us": 8 }
     },
-    "Tournan": { "..." : "..." },
+    "Tournan": { "...": "..." },
     "Villiers": { "...": "..." },
     "Central": { "...": "..." }
   }
 }
 ```
 
----
-
-### `GET /api/stats/evolution`
-
-Retourne une série temporelle de points journaliers pour les courbes d'évolution.
-
-**Paramètres :**
+### `GET /api/stats/hourly`
 
 | Paramètre | Type | Défaut | Description |
 |-----------|------|--------|-------------|
-| `days` | `integer` | `30` | Nombre de jours glissants |
+| `date` | `YYYY-MM-DD` | aujourd'hui | Date de circulation |
+| `branch` | `Chelles` \| `Tournan` \| `Villiers` \| `Central` | — | Filtre par branche (optionnel) |
 
-**Réponse :**
+```json
+[
+  { "heure": 5, "materiel": "RER NG", "total": 4 },
+  { "heure": 5, "materiel": "Francilien", "total": 2 }
+]
+```
+
+### `GET /api/stats/evolution`
+
+| Paramètre | Type | Défaut | Description |
+|-----------|------|--------|-------------|
+| `days` | `integer` | `30` | Nombre de jours glissants (max 365) |
+| `end` | `YYYY-MM-DD` | aujourd'hui | Date de fin de la période |
 
 ```json
 [
   {
     "date": "2026-05-02",
     "pctRERNG": 58,
-    "pctCoupled": 75
-  },
-  {
-    "date": "2026-05-03",
-    "pctRERNG": 61,
-    "pctCoupled": 78
+    "pctNAT": 24,
+    "pctMI2N": 18,
+    "pctCoupled": 75,
+    "total": 184
   }
 ]
+```
+
+### `GET /api/health`
+
+```json
+{ "ok": true }
 ```
 
 ---
@@ -165,38 +165,49 @@ Retourne une série temporelle de points journaliers pour les courbes d'évoluti
 
 | Composant | Technologie |
 |-----------|------------|
-| Framework front | Vue.js 3 (Composition API) |
-| Graphiques | Chart.js |
-| HTTP client (front) | fetch natif |
+| Framework front | Vue.js 3 (Composition API + `<script setup>`) |
+| Graphiques | Chart.js via vue-chartjs |
+| HTTP client (front) | `fetch` natif |
 | API REST | Node.js + Express |
-| Base de données | MySQL |
-| Driver MySQL | mysql2 |
+| Base de données | MySQL (lecture seule) |
+| Driver MySQL | mysql2/promise |
+| Build tool | Vite |
 
 ---
 
 ## Structure du projet
 
 ```
-rer-e-dashboard/
+train_stats/
 ├── api/
-│   ├── index.js          # Point d'entrée Express
-│   ├── db.js             # Connexion MySQL (partagée avec le collecteur)
+│   ├── index.js          # Point d'entrée Express + CORS
+│   ├── db.js             # Pool MySQL partagé (lecture seule)
 │   ├── routes/
-│   │   └── stats.js      # GET /api/stats/daily et /api/stats/evolution
+│   │   └── stats.js      # /daily, /hourly, /evolution
 │   └── .env              # Variables d'environnement
 └── front/
+    ├── public/
+    │   └── Train-Stats.png   # Favicon
     ├── index.html
     ├── src/
     │   ├── main.js
-    │   ├── App.vue
+    │   ├── App.vue           # Orchestration, routing vues, loader
+    │   ├── api.js            # Client fetch → API REST
+    │   ├── utils.js          # pct(), fmtLong(), fmtShort(), MATERIALS
+    │   ├── palette.js        # Couleurs Chart.js par thème (dark/light)
+    │   ├── style.css         # Styles globaux + responsive (768px / 480px)
+    │   ├── composables/
+    │   │   └── useTheme.js   # Thème dark/light persisté en localStorage
     │   └── components/
     │       ├── DatePicker.vue
     │       ├── MetricsBar.vue
     │       ├── MaterialDonut.vue
     │       ├── CouplingCard.vue
     │       ├── BranchGrid.vue
+    │       ├── HourlyChart.vue
     │       └── EvolutionChart.vue
-    └── vite.config.js
+    ├── vite.config.js
+    └── package.json
 ```
 
 ---
@@ -204,14 +215,17 @@ rer-e-dashboard/
 ## Configuration
 
 ```env
+# api/.env
 DB_HOST=localhost
-DB_USER=
+DB_USER=root
 DB_PASSWORD=
 DB_NAME=rer_e_stats
 PORT=3051
+CORS_ORIGIN=http://localhost:5173
 ```
 
-> L'API partage la même base MySQL que le collecteur. Elle est en lecture seule — aucune écriture depuis le dashboard.
+> L'API est en **lecture seule** — aucune écriture depuis le dashboard.  
+> CORS fail-closed : sans `CORS_ORIGIN`, toute requête cross-origin est refusée.
 
 ---
 
@@ -229,4 +243,4 @@ npm install
 npm run dev
 ```
 
-> En production, builder le front avec `npm run build` et servir le dossier `dist/` via Nginx ou directement depuis Express.
+> En production, builder le front avec `npm run build` et servir `dist/` via Nginx ou Express.
