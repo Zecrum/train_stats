@@ -3,6 +3,7 @@ require('dotenv').config();
 module.exports = {
   api: {
     baseUrl: process.env.API_BASE_URL || 'http://localhost:3050',
+    key:     process.env.API_KEY,
   },
   db: {
     host:     process.env.DB_HOST     || 'localhost',

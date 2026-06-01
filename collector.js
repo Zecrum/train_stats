@@ -1,8 +1,11 @@
 const axios = require('axios');
 const config = require('./config');
 
+const headers = { 'X-API-Key': config.api.key };
+
 async function fetchTimetable(entry, date) {
   const response = await axios.get(`${config.api.baseUrl}/api/transilien/timetable`, {
+    headers,
     params: {
       date,
       departure: entry.departure,
@@ -26,7 +29,7 @@ async function fetchTimetable(entry, date) {
 }
 
 async function fetchEquipment(trainNumber, date) {
-  const response = await axios.get(`${config.api.baseUrl}/api/transilien/equipment/${trainNumber}/${date}`);
+  const response = await axios.get(`${config.api.baseUrl}/api/transilien/equipment/${trainNumber}/${date}`, { headers });
   return response.data.sets || [];
 }
 
