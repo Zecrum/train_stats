@@ -4,33 +4,26 @@ const pool = require("../db");
 
 const router = express.Router();
 
-const BRANCHES = {
-  Chelles:  { label: "Chelles–Gournay",    missions: "NOCY · CONY" },
-  Tournan:  { label: "Tournan",            missions: "NATU · NUTU · TANU · TINU" },
-  Villiers: { label: "Villiers-sur-Marne", missions: "NOVY · VONY" },
-  Central:  { label: "Tronçon central",    missions: "NOMY · MONY" },
-};
+// Source unique pour les branches — BRANCH_CASE, KNOWN_MISSIONS, BRANCH_MISSIONS et BRANCHES en sont dérivés.
+const BRANCH_DEF = [
+  { key: "Chelles",  label: "Chelles–Gournay",    missions: ["NOCY","CONY"] },
+  { key: "Tournan",  label: "Tournan",            missions: ["NATU","NUTU","TANU","TINU"] },
+  { key: "Villiers", label: "Villiers-sur-Marne", missions: ["NOVY","VONY"] },
+  { key: "Central",  label: "Tronçon central",    missions: ["NOMY","MONY"] },
+];
+function mIn(ms) { return `mission IN (${ms.map(m => `'${m}'`).join(",")})`; }
+const BRANCHES       = Object.fromEntries(BRANCH_DEF.map(b => [b.key, { label: b.label, missions: b.missions.join(" · ") }]));
+const BRANCH_CASE    = `CASE ${BRANCH_DEF.map(b => `WHEN ${mIn(b.missions)} THEN '${b.key}'`).join(" ")} END`;
+const KNOWN_MISSIONS = mIn(BRANCH_DEF.flatMap(b => b.missions));
+const BRANCH_MISSIONS = Object.fromEntries(BRANCH_DEF.map(b => [b.key, mIn(b.missions)]));
 
 const MAT_KEY = { "RER NG": "RERNG", "NAT": "NAT", "MI2N": "MI2N", "Francilien": "NAT" };
 
-// Expressions SQL réutilisables
 const MAT_EXPR  = `JSON_UNQUOTE(JSON_EXTRACT(composition, '$[0].commercialName'))`;
 const COUP_EXPR = `IF(JSON_LENGTH(composition) > 1, 'um', 'us')`;
-const BRANCH_CASE = `
-  CASE
-    WHEN mission IN ('NOCY','CONY')              THEN 'Chelles'
-    WHEN mission IN ('NATU','NUTU','TANU','TINU') THEN 'Tournan'
-    WHEN mission IN ('NOVY','VONY')              THEN 'Villiers'
-    WHEN mission IN ('NOMY','MONY')              THEN 'Central'
-  END`;
-const KNOWN_MISSIONS = `mission IN ('NOCY','CONY','NATU','NUTU','TANU','TINU','NOVY','VONY','NOMY','MONY')`;
 
-const BRANCH_MISSIONS = {
-  Chelles:  `mission IN ('NOCY','CONY')`,
-  Tournan:  `mission IN ('NATU','NUTU','TANU','TINU')`,
-  Villiers: `mission IN ('NOVY','VONY')`,
-  Central:  `mission IN ('NOMY','MONY')`,
-};
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function parseDate(d) { return DATE_RE.test(d) ? d : today(); }
 
 function today() {
   return new Date().toLocaleDateString("en-CA");
@@ -43,7 +36,7 @@ function emptyCoup() { return { um: 0, us: 0 }; }
 /* -------------------------------------------------------------------------- */
 router.get("/daily", async (req, res, next) => {
   try {
-    const date = req.query.date || today();
+    const date = parseDate(req.query.date);
 
     const [[totals]] = await pool.query(
       `SELECT COUNT(*)                AS total,
@@ -134,7 +127,7 @@ router.get("/daily", async (req, res, next) => {
 /* -------------------------------------------------------------------------- */
 router.get("/hourly", async (req, res, next) => {
   try {
-    const date = req.query.date || today();
+    const date = parseDate(req.query.date);
     const branchFilter = BRANCH_MISSIONS[req.query.branch] ? `AND ${BRANCH_MISSIONS[req.query.branch]}` : "";
     const [rows] = await pool.query(
       `SELECT HOUR(departureTime) AS heure, ${MAT_EXPR} AS materiel, COUNT(*) AS total
@@ -150,33 +143,12 @@ router.get("/hourly", async (req, res, next) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/stats/hourly-branches?date=YYYY-MM-DD                              */
-/* -------------------------------------------------------------------------- */
-router.get("/hourly-branches", async (req, res, next) => {
-  try {
-    const date = req.query.date || today();
-    const [rows] = await pool.query(
-      `SELECT HOUR(departureTime) AS heure,
-              ${BRANCH_CASE} AS branche,
-              COUNT(*) AS total
-         FROM trains
-        WHERE date = ? AND status = 'ok' AND ${KNOWN_MISSIONS}
-        GROUP BY heure, branche
-        ORDER BY heure`,
-      [date]
-    );
-    res.set("Cache-Control", cacheFor(date));
-    res.json(rows.map((r) => ({ heure: Number(r.heure), branche: r.branche, total: Number(r.total) })));
-  } catch (e) { next(e); }
-});
-
-/* -------------------------------------------------------------------------- */
 /* GET /api/stats/evolution?days=30&end=YYYY-MM-DD                             */
 /* -------------------------------------------------------------------------- */
 router.get("/evolution", async (req, res, next) => {
   try {
     const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
-    const end  = req.query.end || today();
+    const end  = parseDate(req.query.end);
     const [rows] = await pool.query(
       `SELECT date,
               ROUND(100 * SUM(${MAT_EXPR} IN ('RER NG'))                    / COUNT(*)) AS pctRERNG,

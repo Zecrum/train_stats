@@ -7,10 +7,10 @@ const statsRouter = require("./routes/stats");
 const app = express();
 const PORT = process.env.PORT || 3051;
 
-const origins = (process.env.CORS_ORIGIN || "*")
-  .split(",")
-  .map((s) => s.trim());
-app.use(cors({ origin: origins.includes("*") ? true : origins }));
+const origins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+  : [];
+app.use(cors({ origin: origins.length ? origins : false }));
 
 app.use("/api/stats", statsRouter);
 

@@ -20,33 +20,44 @@ const TABS = [
   { id: "evolution", label: "Évolution" },
 ];
 
-const view = ref(localStorage.getItem("rere_view") || "jour");
+function lsGet(k, fb) { try { return localStorage.getItem(k) ?? fb; } catch { return fb; } }
+function lsSet(k, v)  { try { localStorage.setItem(k, v); } catch {} }
+
+const view = ref(lsGet("rere_view", "jour"));
 const date = ref(TODAY);
-const period = ref(Number(localStorage.getItem("rere_period")) || 30);
-watch(view, (v) => localStorage.setItem("rere_view", v));
-watch(period, (p) => localStorage.setItem("rere_period", p));
+const period = ref(Number(lsGet("rere_period", "30")) || 30);
+watch(view, (v) => lsSet("rere_view", v));
+watch(period, (p) => lsSet("rere_period", p));
 
 const BRANCH_KEYS = ["Chelles", "Tournan", "Villiers", "Central"];
-const BRANCH_LABELS = { Chelles: "Chelles", Tournan: "Tournan", Villiers: "Villiers", Central: "Central" };
 
 const daily = ref(null);
 const hourly = ref(null);
 const evolution = ref(null);
 const branchFilter = ref(null);
 const error = ref("");
+const loading = ref(false);
+
+let _inFlight = 0;
+function startLoad() { if (++_inFlight > 0) loading.value = true; }
+function endLoad()   { if (--_inFlight <= 0) { _inFlight = 0; loading.value = false; } }
 
 async function loadDay() {
+  startLoad();
   try {
     error.value = "";
     const [d, h] = await Promise.all([api.daily(date.value), api.hourly(date.value, branchFilter.value)]);
     daily.value = d;
     hourly.value = h;
   } catch (e) { error.value = e.message; }
+  finally { endLoad(); }
 }
 async function loadEvolution() {
+  startLoad();
   try {
     evolution.value = await api.evolution(period.value, date.value);
   } catch (e) { error.value = e.message; }
+  finally { endLoad(); }
 }
 
 watch(date, () => { loadDay(); loadEvolution(); }, { immediate: true });
@@ -87,8 +98,7 @@ const evoStats = computed(() => {
       <header class="db-top">
         <div class="db-brand">
           <span class="db-tag">RER&nbsp;E</span>
-          <span class="db-title">stats.composition</span>
-          <span class="db-live"><i></i>collecte active</span>
+          <span class="db-title">Transilien Stats</span>
         </div>
         <div class="db-top-right">
           <DatePicker v-model="date" />
@@ -110,6 +120,9 @@ const evoStats = computed(() => {
         </button>
       </nav>
 
+      <div class="db-loader" :class="{ 'is-active': loading }"><div class="db-loader-bar"></div></div>
+
+      <div :class="{ 'db-content-loading': loading }">
       <p v-if="error" class="db-error">⚠ {{ error }}</p>
 
       <!-- ===== Vue Jour J ===== -->
@@ -130,7 +143,7 @@ const evoStats = computed(() => {
           <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peak.h }}h</div><div class="db-stat-l">heure de pointe</div></div>
           <div><div class="db-stat-v">{{ peak.total }}</div><div class="db-stat-l">circ. à la pointe</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v" style="color:var(--c-nat)">{{ pct(peak.rerng, peak.total) }}%</div><div class="db-stat-l">% RER NG à la pointe</div></div>
+          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ pct(peak.rerng, peak.total) }}%</div><div class="db-stat-l">% RER NG à la pointe</div></div>
         </section>
         <section class="db-panel db-chartcard">
           <div class="db-panel-h">
@@ -138,7 +151,7 @@ const evoStats = computed(() => {
             <span class="db-ph-right">
               <span class="db-period">
                 <button :class="{ 'is-active': branchFilter === null }" @click="branchFilter = null">Toutes</button>
-                <button v-for="b in BRANCH_KEYS" :key="b" :class="{ 'is-active': branchFilter === b }" @click="branchFilter = b">{{ BRANCH_LABELS[b] }}</button>
+                <button v-for="b in BRANCH_KEYS" :key="b" :class="{ 'is-active': branchFilter === b }" @click="branchFilter = b">{{ b }}</button>
               </span>
             </span>
           </div>
@@ -184,12 +197,23 @@ const evoStats = computed(() => {
         </section>
       </template>
 
-      <p v-else-if="!error" class="db-loading">Chargement…</p>
+      <p v-else-if="!error && !loading" class="db-loading">Chargement…</p>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.db-error { font-family: "IBM Plex Mono", monospace; color: var(--c-mi2n); padding: 14px; }
+.db-error   { font-family: "IBM Plex Mono", monospace; color: var(--c-mi2n); padding: 14px; }
 .db-loading { font-family: "IBM Plex Mono", monospace; color: var(--faint); padding: 40px; text-align: center; }
+
+.db-loader { height: 2px; overflow: hidden; }
+.db-loader-bar { height: 100%; background: var(--c-rerng); width: 40%; transform: translateX(-100%); }
+.db-loader.is-active .db-loader-bar { animation: db-load 1.1s ease-in-out infinite; }
+@keyframes db-load {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+.db-content-loading { opacity: 0.5; transition: opacity 0.15s; pointer-events: none; }
 </style>
