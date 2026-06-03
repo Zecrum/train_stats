@@ -26,8 +26,7 @@ async function tryFetchEntry(entry, date) {
   }
 }
 
-async function collectTimetable() {
-  const date = todayParis();
+async function collectTimetable(date = todayParis()) {
   logger.info(`TIMETABLE | Collecte du ${date}`);
 
   const failed = [];
