@@ -75,7 +75,7 @@ async function initDb() {
       trainNumber  VARCHAR(20) NOT NULL,
       date         DATE        NOT NULL,
       canceled     TINYINT(1),
-      delayed      TINYINT(1),
+      isDelayed    TINYINT(1),
       delayMinutes SMALLINT,
       fetchedAt    DATETIME,
       PRIMARY KEY (trainNumber, date)
@@ -102,7 +102,7 @@ async function initDb() {
       id          INT         NOT NULL AUTO_INCREMENT,
       trainNumber VARCHAR(20),
       date        DATE,
-      type        VARCHAR(60),
+      disruptionType VARCHAR(60),
       title       VARCHAR(200),
       message     TEXT,
       PRIMARY KEY (id),
@@ -188,10 +188,10 @@ async function saveDetail(trainNumber, date, detail) {
   }
 
   await pool.execute(
-    `INSERT INTO train_details (trainNumber, date, canceled, delayed, delayMinutes, fetchedAt)
+    `INSERT INTO train_details (trainNumber, date, canceled, isDelayed, delayMinutes, fetchedAt)
      VALUES (?, ?, ?, ?, ?, NOW())
      ON DUPLICATE KEY UPDATE
-       canceled = VALUES(canceled), delayed = VALUES(delayed),
+       canceled = VALUES(canceled), isDelayed = VALUES(isDelayed),
        delayMinutes = VALUES(delayMinutes), fetchedAt = NOW()`,
     [trainNumber, date, canceled, delayed, delayMinutes]
   );
@@ -210,7 +210,7 @@ async function saveDetail(trainNumber, date, detail) {
   await pool.execute('DELETE FROM train_disruptions WHERE trainNumber = ? AND date = ?', [trainNumber, date]);
   for (const d of disruptions) {
     await pool.execute(
-      `INSERT INTO train_disruptions (trainNumber, date, type, title, message) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO train_disruptions (trainNumber, date, disruptionType, title, message) VALUES (?, ?, ?, ?, ?)`,
       [trainNumber, date, d.type || null, d.title || null, d.message || null]
     );
   }
