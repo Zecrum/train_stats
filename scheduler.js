@@ -12,6 +12,8 @@ const logger = require('./logger');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 let isRunning = false;
+let lastDetailAt = 0;
+const DETAIL_COOLDOWN = 2 * 60 * 1000;
 
 function hasTrainArrived(stops) {
   if (stops.length === 0) return true;
@@ -125,15 +127,19 @@ async function handleDetailError(train, err) {
 }
 
 async function processDetailQueue() {
+  if (Date.now() - lastDetailAt < DETAIL_COOLDOWN) return;
+
   const trains = await getPendingDetailTrains();
   if (trains.length === 0) return;
 
-  logger.info(`DETAIL    | ${trains.length} train(s) à traiter`);
+  const batch = trains.slice(0, config.scheduler.detailPerCycle);
+  logger.info(`DETAIL    | ${batch.length}/${trains.length} train(s) traités ce cycle`);
 
-  for (const train of trains) {
+  for (const train of batch) {
     logger.info(`DETAIL API      | ${train.trainNumber} | ${train.date}`);
     try {
       const detail = await fetchTrainDetail(train.trainNumber, train.date);
+      lastDetailAt = Date.now();
       const stops = detail.stops || [];
 
       if (!hasTrainArrived(stops)) {
@@ -148,9 +154,10 @@ async function processDetailQueue() {
         logger.ok(`DETAIL OK       | ${train.trainNumber} | ${train.date}${flags.length ? ' | ' + flags.join(', ') : ''}`);
       }
     } catch (err) {
+      lastDetailAt = Date.now();
       await handleDetailError(train, err);
     }
-    await sleep(config.scheduler.equipmentCallSpacing);
+    await sleep(config.scheduler.detailCallSpacing);
   }
 }
 
