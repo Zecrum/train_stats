@@ -11,33 +11,38 @@ const { palette } = useTheme();
 
 const MAT_FROM_DB = { "RER NG": "RERNG", "NAT": "NAT", "MI2N": "MI2N", "Francilien": "NAT" };
 
-const hours = computed(() =>
-  [...new Set(props.hourly.map((r) => r.heure))].sort((a, b) => a - b)
+function slotToLabel(s) {
+  const h = Math.floor(s * 15 / 60);
+  const m = (s * 15) % 60;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+}
+
+const slots = computed(() =>
+  [...new Set(props.hourly.map((r) => r.slot))].sort((a, b) => a - b)
 );
 const lookup = computed(() => {
   const m = {};
   props.hourly.forEach((r) => {
     const key = MAT_FROM_DB[r.materiel] || r.materiel;
-    m[`${r.heure}|${key}`] = (m[`${r.heure}|${key}`] || 0) + r.total;
+    m[`${r.slot}|${key}`] = (m[`${r.slot}|${key}`] || 0) + r.total;
   });
   return m;
 });
 
-const dense = computed(() => hours.value.length > 10);
 const colors = computed(() => MAT_COLOR(palette.value));
 
 const chartData = computed(() => ({
-  labels: hours.value.map((h) => `${h}h`),
+  labels: slots.value.map(slotToLabel),
   datasets: MATERIALS.map((m) => {
     const color = colors.value[m.key];
     return {
       label: m.name,
-      data: hours.value.map((h) => lookup.value[`${h}|${m.key}`] || 0),
+      data: slots.value.map((s) => lookup.value[`${s}|${m.key}`] || 0),
       borderColor: color,
       backgroundColor: color,
       borderWidth: 2.5,
       tension: 0.3,
-      pointRadius: dense.value ? 0 : 3,
+      pointRadius: 0,
       pointHoverRadius: 5,
       pointBackgroundColor: palette.value.panel,
       pointBorderColor: color,
@@ -53,12 +58,21 @@ const options = computed(() => ({
   interaction: { mode: "index", intersect: false },
   plugins: {
     legend: { display: false },
-    tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} : ${c.raw} circ.` } },
+    tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} : ${c.raw} trains` } },
   },
   scales: {
     x: {
       grid: { display: false },
-      ticks: { color: palette.value.faint, font: { family: "IBM Plex Mono" } },
+      ticks: {
+        color: palette.value.faint,
+        font: { family: "IBM Plex Mono" },
+        autoSkip: false,
+        maxRotation: 0,
+        callback: (_, idx) => {
+          const s = slots.value[idx];
+          return s !== undefined && s % 4 === 0 ? slotToLabel(s) : "";
+        },
+      },
     },
     y: {
       beginAtZero: true,
@@ -76,7 +90,7 @@ const options = computed(() => ({
       <span v-for="m in MATERIALS" :key="m.key" class="db-lr is-line">
         <i :style="{ background: colors[m.key] }"></i>{{ m.name }}
       </span>
-      <span class="db-lr" style="margin-left:auto;color:var(--faint)">circulations / heure (status = ok)</span>
+      <span class="db-lr" style="margin-left:auto;color:var(--faint)">trains en circulation par tranche de 15 min</span>
     </div>
   </div>
 </template>

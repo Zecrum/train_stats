@@ -129,16 +129,37 @@ router.get("/hourly", async (req, res, next) => {
   try {
     const date = parseDate(req.query.date);
     const branchFilter = BRANCH_MISSIONS[req.query.branch] ? `AND ${BRANCH_MISSIONS[req.query.branch]}` : "";
+    // 96 tranches de 15 min (slot 0 = 0h00, slot 95 = 23h45).
+    // Un train est compté dans le slot S s'il est EN CIRCULATION à ce moment.
+    // Cas passant minuit : arrivalTime < departureTime → en service jusqu'au slot 95.
     const [rows] = await pool.query(
-      `SELECT HOUR(departureTime) AS heure, ${MAT_EXPR} AS materiel, COUNT(*) AS total
-         FROM trains
-        WHERE date = ? AND status = 'ok' ${branchFilter}
-        GROUP BY heure, materiel
-        ORDER BY heure`,
+      `SELECT s.slot, ${MAT_EXPR} AS materiel, COUNT(*) AS total
+         FROM (
+           SELECT a.n * 16 + b.n AS slot
+           FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2
+                 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) AS a
+           CROSS JOIN (
+             SELECT 0 AS n UNION ALL SELECT 1  UNION ALL SELECT 2  UNION ALL SELECT 3
+             UNION ALL SELECT 4  UNION ALL SELECT 5  UNION ALL SELECT 6  UNION ALL SELECT 7
+             UNION ALL SELECT 8  UNION ALL SELECT 9  UNION ALL SELECT 10 UNION ALL SELECT 11
+             UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15
+           ) AS b
+         ) AS s
+         JOIN trains t ON (
+           (TIME(t.arrivalTime) >= TIME(t.departureTime)
+            AND FLOOR((HOUR(t.departureTime) * 60 + MINUTE(t.departureTime)) / 15) <= s.slot
+            AND FLOOR((HOUR(t.arrivalTime)   * 60 + MINUTE(t.arrivalTime))   / 15) >= s.slot)
+           OR
+           (TIME(t.arrivalTime) < TIME(t.departureTime)
+            AND FLOOR((HOUR(t.departureTime) * 60 + MINUTE(t.departureTime)) / 15) <= s.slot)
+         )
+        WHERE t.date = ? AND t.status = 'ok' ${branchFilter}
+        GROUP BY s.slot, materiel
+        ORDER BY s.slot`,
       [date]
     );
     res.set("Cache-Control", cacheFor(date));
-    res.json(rows.map((r) => ({ heure: Number(r.heure), materiel: r.materiel, total: Number(r.total) })));
+    res.json(rows.map((r) => ({ slot: Number(r.slot), materiel: r.materiel, total: Number(r.total) })));
   } catch (e) { next(e); }
 });
 

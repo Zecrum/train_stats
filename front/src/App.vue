@@ -65,21 +65,27 @@ watch(period, loadEvolution);
 watch(branchFilter, loadDay);
 
 // --- Indicateurs vue Horaire ---
-const PEAK_MORNING = [7, 8, 9];
-const PEAK_EVENING = [16, 17, 18, 19];
+// slot = index de tranche de 15 min (0 = 0h00, 28 = 7h00, 39 = 9h45, 64 = 16h00, 79 = 19h45)
+const PEAK_MORNING = [28, 39];
+const PEAK_EVENING = [64, 79];
 
 const peakStats = computed(() => {
   if (!hourly.value || !hourly.value.length) return null;
-  function sumPeriod(hours) {
-    let total = 0, rerng = 0;
+  // Retourne le pic (max trains simultanés) dans la plage de slots donnée.
+  function peakMax(minSlot, maxSlot) {
+    const bySlot = {};
     hourly.value.forEach((r) => {
-      if (!hours.includes(r.heure)) return;
-      total += r.total;
-      if (r.materiel === "RER NG") rerng += r.total;
+      if (r.slot < minSlot || r.slot > maxSlot) return;
+      if (!bySlot[r.slot]) bySlot[r.slot] = { total: 0, rerng: 0 };
+      bySlot[r.slot].total += r.total;
+      if (r.materiel === "RER NG") bySlot[r.slot].rerng += r.total;
     });
-    return { total, rerng };
+    return Object.values(bySlot).reduce(
+      (best, s) => (s.total > best.total ? s : best),
+      { total: 0, rerng: 0 }
+    );
   }
-  return { morning: sumPeriod(PEAK_MORNING), evening: sumPeriod(PEAK_EVENING) };
+  return { morning: peakMax(...PEAK_MORNING), evening: peakMax(...PEAK_EVENING) };
 });
 
 // --- Indicateurs vue Évolution ---
@@ -146,11 +152,11 @@ const evoStats = computed(() => {
         <section class="db-panel db-metrics" v-if="peakStats">
           <div><div class="db-stat-v">{{ daily.resolved }}</div><div class="db-stat-l">circulations (status ok)</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.morning.total }}</div><div class="db-stat-l">pointe matin · 7h–9h</div></div>
-          <div><div class="db-stat-v">{{ pct(peakStats.morning.rerng, peakStats.morning.total) }}%</div><div class="db-stat-l">% RER NG matin</div></div>
+          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.morning.total }}</div><div class="db-stat-l">max simultané · pointe matin 7h–9h</div></div>
+          <div><div class="db-stat-v">{{ pct(peakStats.morning.rerng, peakStats.morning.total) }}%</div><div class="db-stat-l">% RER NG au pic matin</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.evening.total }}</div><div class="db-stat-l">pointe soir · 16h–19h</div></div>
-          <div><div class="db-stat-v">{{ pct(peakStats.evening.rerng, peakStats.evening.total) }}%</div><div class="db-stat-l">% RER NG soir</div></div>
+          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.evening.total }}</div><div class="db-stat-l">max simultané · pointe soir 16h–19h</div></div>
+          <div><div class="db-stat-v">{{ pct(peakStats.evening.rerng, peakStats.evening.total) }}%</div><div class="db-stat-l">% RER NG au pic soir</div></div>
         </section>
         <section class="db-panel db-chartcard">
           <div class="db-panel-h">
@@ -163,7 +169,7 @@ const evoStats = computed(() => {
             </span>
           </div>
           <HourlyChart :hourly="hourly" />
-          <div class="db-foot-note">/api/stats/hourly{{ branchFilter ? '&branch=' + branchFilter : '' }} · une courbe par matériel (status = ok)</div>
+          <div class="db-foot-note">/api/stats/hourly{{ branchFilter ? '?branch=' + branchFilter : '' }} · trains en circulation par tranche de 15 min (status = ok)</div>
         </section>
       </template>
 
