@@ -1,6 +1,7 @@
 const mysql = require('mysql2/promise');
 const config = require('./config');
 const logger = require('./logger');
+const { nowParis } = require('./utils');
 
 const pool = mysql.createPool(config.db);
 
@@ -43,13 +44,14 @@ async function insertTrain(train) {
 }
 
 async function getPendingTrains() {
+  const now = nowParis();
   const [rows] = await pool.execute(`
     SELECT * FROM trains
     WHERE status = 'pending'
-      AND departureTime <= NOW() - INTERVAL 5 MINUTE
+      AND departureTime <= ? - INTERVAL 5 MINUTE
       AND (nextRetryAt IS NULL OR nextRetryAt <= NOW())
     ORDER BY departureTime ASC
-  `);
+  `, [now]);
   return rows;
 }
 

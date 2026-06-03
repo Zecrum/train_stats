@@ -21,6 +21,38 @@ async function handleRetry(train) {
   }
 }
 
+async function handleApiError(train, err) {
+  const status = err.response?.status;
+  const id = `${train.trainNumber} | ${train.date}`;
+
+  if (status === 429) {
+    await scheduleRetry(train.trainNumber, train.date, train.retries, 60);
+    logger.warn(`RATE LIMIT | ${id} | retry dans 60 min (tentative conservée)`);
+    return;
+  }
+
+  if ([500, 502, 503, 504].includes(status)) {
+    await scheduleRetry(train.trainNumber, train.date, train.retries, 60);
+    logger.warn(`API DOWN   | ${id} | HTTP ${status} — retry dans 60 min (tentative conservée)`);
+    return;
+  }
+
+  if (status === 401) {
+    await scheduleRetry(train.trainNumber, train.date, train.retries, 120);
+    logger.error(`AUTH ERROR | ${id} | HTTP 401 — vérifier la clé API (retry dans 2h)`);
+    return;
+  }
+
+  if (status === 404) {
+    await markUnknown(train.trainNumber, train.date, train.retries + 1);
+    logger.warn(`NOT FOUND  | ${id} | HTTP 404 — marqué unknown`);
+    return;
+  }
+
+  logger.error(`ERR API    | ${id} | ${err.message}`);
+  await handleRetry(train);
+}
+
 async function processEquipmentQueue() {
   if (isRunning) return;
   isRunning = true;
@@ -46,8 +78,7 @@ async function processEquipmentQueue() {
           await handleRetry(train);
         }
       } catch (err) {
-        logger.error(`ERR API  | ${train.trainNumber} | ${train.date} | ${err.message}`);
-        await handleRetry(train);
+        await handleApiError(train, err);
       }
 
       await sleep(config.scheduler.equipmentCallSpacing);
