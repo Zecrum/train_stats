@@ -64,27 +64,18 @@ router.get("/daily", async (req, res, next) => {
       [date]
     );
 
-    const [brTotal] = await pool.query(
-      `SELECT ${BRANCH_CASE} AS branche, COUNT(*) AS total
+    // Une seule requête branche — GROUP BY 1 (positionnel) évite les ambiguïtés
+    // d'alias dans GROUP BY selon la version MySQL/MariaDB.
+    const [brRows] = await pool.query(
+      `SELECT ${BRANCH_CASE} AS branche,
+              COUNT(*) AS total,
+              SUM(${MAT_EXPR} = 'RER NG')             AS n_rerng,
+              SUM(${MAT_EXPR} IN ('NAT','Francilien')) AS n_nat,
+              SUM(${MAT_EXPR} = 'MI2N')               AS n_mi2n,
+              SUM(JSON_LENGTH(composition) > 1)        AS n_um
          FROM trains
         WHERE date = ? AND status = 'ok' AND ${KNOWN_MISSIONS}
-        GROUP BY branche`,
-      [date]
-    );
-
-    const [brMat] = await pool.query(
-      `SELECT ${BRANCH_CASE} AS branche, ${MAT_EXPR} AS materiel, COUNT(*) AS n
-         FROM trains
-        WHERE date = ? AND status = 'ok' AND ${KNOWN_MISSIONS}
-        GROUP BY branche, materiel`,
-      [date]
-    );
-
-    const [brCoup] = await pool.query(
-      `SELECT ${BRANCH_CASE} AS branche, ${COUP_EXPR} AS couplage, COUNT(*) AS n
-         FROM trains
-        WHERE date = ? AND status = 'ok' AND ${KNOWN_MISSIONS}
-        GROUP BY branche, couplage`,
+        GROUP BY 1`,
       [date]
     );
 
@@ -98,9 +89,18 @@ router.get("/daily", async (req, res, next) => {
     for (const key of Object.keys(BRANCHES)) {
       branches[key] = { label: BRANCHES[key].label, missions: BRANCHES[key].missions, total: 0, material: emptyMat(), coupling: emptyCoup() };
     }
-    brTotal.forEach((r) => { if (branches[r.branche]) branches[r.branche].total = Number(r.total); });
-    brMat.forEach((r)   => { if (branches[r.branche] && MAT_KEY[r.materiel]) branches[r.branche].material[MAT_KEY[r.materiel]] += Number(r.n); });
-    brCoup.forEach((r)  => { if (branches[r.branche]) branches[r.branche].coupling[r.couplage] = Number(r.n); });
+    brRows.forEach((r) => {
+      const b = branches[r.branche];
+      if (!b) return;
+      const total = Number(r.total);
+      const um    = Number(r.n_um) || 0;
+      b.total              = total;
+      b.material.RERNG     = Number(r.n_rerng) || 0;
+      b.material.NAT       = Number(r.n_nat)   || 0;
+      b.material.MI2N      = Number(r.n_mi2n)  || 0;
+      b.coupling.um        = um;
+      b.coupling.us        = total - um;
+    });
 
     const resolved  = Number(totals.resolved) || 0;
     const unknown   = Number(totals.unknown)  || 0;

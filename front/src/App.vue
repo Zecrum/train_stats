@@ -65,15 +65,21 @@ watch(period, loadEvolution);
 watch(branchFilter, loadDay);
 
 // --- Indicateurs vue Horaire ---
-const peak = computed(() => {
+const PEAK_MORNING = [7, 8, 9];
+const PEAK_EVENING = [16, 17, 18, 19];
+
+const peakStats = computed(() => {
   if (!hourly.value || !hourly.value.length) return null;
-  const byHour = {};
-  hourly.value.forEach((r) => {
-    byHour[r.heure] = byHour[r.heure] || { h: r.heure, total: 0, rerng: 0 };
-    byHour[r.heure].total += r.total;
-    if (r.materiel === "RER NG") byHour[r.heure].rerng += r.total;
-  });
-  return Object.values(byHour).reduce((a, b) => (b.total > a.total ? b : a));
+  function sumPeriod(hours) {
+    let total = 0, rerng = 0;
+    hourly.value.forEach((r) => {
+      if (!hours.includes(r.heure)) return;
+      total += r.total;
+      if (r.materiel === "RER NG") rerng += r.total;
+    });
+    return { total, rerng };
+  }
+  return { morning: sumPeriod(PEAK_MORNING), evening: sumPeriod(PEAK_EVENING) };
 });
 
 // --- Indicateurs vue Évolution ---
@@ -137,13 +143,14 @@ const evoStats = computed(() => {
 
       <!-- ===== Vue Répartition horaire ===== -->
       <template v-else-if="view === 'horaire' && daily && hourly">
-        <section class="db-panel db-metrics" v-if="peak">
+        <section class="db-panel db-metrics" v-if="peakStats">
           <div><div class="db-stat-v">{{ daily.resolved }}</div><div class="db-stat-l">circulations (status ok)</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peak.h }}h</div><div class="db-stat-l">heure de pointe</div></div>
-          <div><div class="db-stat-v">{{ peak.total }}</div><div class="db-stat-l">circ. à la pointe</div></div>
+          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.morning.total }}</div><div class="db-stat-l">pointe matin · 7h–9h</div></div>
+          <div><div class="db-stat-v">{{ pct(peakStats.morning.rerng, peakStats.morning.total) }}%</div><div class="db-stat-l">% RER NG matin</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ pct(peak.rerng, peak.total) }}%</div><div class="db-stat-l">% RER NG à la pointe</div></div>
+          <div><div class="db-stat-v" style="color:var(--c-rerng)">{{ peakStats.evening.total }}</div><div class="db-stat-l">pointe soir · 16h–19h</div></div>
+          <div><div class="db-stat-v">{{ pct(peakStats.evening.rerng, peakStats.evening.total) }}%</div><div class="db-stat-l">% RER NG soir</div></div>
         </section>
         <section class="db-panel db-chartcard">
           <div class="db-panel-h">
