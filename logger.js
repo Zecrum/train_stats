@@ -4,12 +4,16 @@ const path = require('path');
 const logsDir = path.join(__dirname, 'logs');
 fs.mkdirSync(logsDir, { recursive: true });
 
+function nowParis() {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
+}
+
 function getLogPath() {
-  return path.join(logsDir, new Date().toISOString().substring(0, 10) + '.log');
+  return path.join(logsDir, nowParis().substring(0, 10) + '.log');
 }
 
 function write(level, message) {
-  const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const ts = nowParis();
   const line = `[${ts}] [${level}] ${message}`;
   console.log(line);
   fs.appendFileSync(getLogPath(), line + '\n');

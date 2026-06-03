@@ -1,5 +1,5 @@
 function nowParis() {
-  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Paris' }).replace(' ', 'T');
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
 }
 
 function todayParis() {
