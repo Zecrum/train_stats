@@ -15,20 +15,27 @@ let isRunning = false;
 let lastDetailAt = 0;
 const DETAIL_COOLDOWN = 2 * 60 * 1000;
 
+const DELETED_SEGMENT_TYPES = new Set([
+  'START_DISRUPTION_DELETED',
+  'STOP_DISRUPTION_DELETED',
+  'END_DISRUPTION_DELETED',
+  'STOP_ACTIVE_DISRUPTION_DELETED',
+]);
+
 function hasTrainArrived(stops) {
   if (stops.length === 0) return true;
 
-  const activeStops = stops.filter(s =>
-    s.segmentType !== 'STOP_DISRUPTION_DELETED' &&
-    s.segmentType !== 'STOP_ACTIVE_DISRUPTION_DELETED'
-  );
-
+  const activeStops = stops.filter(s => !DELETED_SEGMENT_TYPES.has(s.segmentType));
   if (activeStops.length === 0) return true;
 
   const terminus = activeStops.find(s => s.segmentType === 'END_ACTIVE_SEGMENT')
     ?? activeStops[activeStops.length - 1];
 
-  return !!terminus.realTime;
+  // Toujours en route : terminus en retard sans heure réelle confirmée
+  if (terminus.isDelayed && !terminus.realTime) return false;
+
+  // À l'heure (realTime null normal) ou arrivé avec confirmation
+  return true;
 }
 
 // ── Equipment ─────────────────────────────────────────────────────────────────

@@ -6,9 +6,10 @@ const { nowParis } = require('./utils');
 const pool = mysql.createPool(config.db);
 
 const ROLLING_STOCK_MAP = {
-  'RER NG': 'RERNG',
-  'MI2N':   'MI2N',
-  'NAT':    'NAT',
+  'RER NG':    'RERNG',
+  'MI2N':      'MI2N',
+  'NAT':       'NAT',
+  'Francilien':'NAT',
 };
 
 function timeToMinutes(t) {
@@ -177,9 +178,14 @@ async function saveDetail(trainNumber, date, detail) {
   const disruptions = detail.disruptions  || [];
 
   const delayed = stops.some(s => s.isDelayed) ? 1 : 0;
-  const canceled = stops.length > 0 && stops.every(s =>
-    s.segmentType === 'STOP_DISRUPTION_DELETED' || s.segmentType === 'STOP_ACTIVE_DISRUPTION_DELETED'
-  ) ? 1 : 0;
+  const DELETED_SEGMENT_TYPES = new Set([
+    'START_DISRUPTION_DELETED',
+    'STOP_DISRUPTION_DELETED',
+    'END_DISRUPTION_DELETED',
+    'STOP_ACTIVE_DISRUPTION_DELETED',
+  ]);
+  const canceled = disruptions.some(d => d.type === 'DISRUPTION_DELETED') ||
+    (stops.length > 0 && stops.every(s => DELETED_SEGMENT_TYPES.has(s.segmentType))) ? 1 : 0;
 
   let delayMinutes = 0;
   const firstDelayed = stops.find(s => s.isDelayed && s.realTime && s.scheduledTime);
