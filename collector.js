@@ -34,7 +34,7 @@ async function fetchEquipment(trainNumber, date) {
 
 async function fetchTrainDetail(trainNumber, date) {
   const response = await axios.get(
-    `${config.api.baseUrl}/api/train/detail/${trainNumber}/${date}`,
+    `${config.api.baseUrl}/api/train/${trainNumber}/${date}`,
     { headers }
   );
   return response.data;

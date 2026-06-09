@@ -18,6 +18,13 @@ function timeToMinutes(t) {
   return h * 60 + m;
 }
 
+// Extrait HH:MM:SS depuis un timestamp ISO ou laisse HH:MM tel quel
+function extractTime(dt) {
+  if (!dt) return null;
+  if (dt.length <= 8) return dt;
+  return new Date(dt).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Paris' });
+}
+
 async function initDb() {
   const { database, ...connConfig } = config.db;
   const tmp = await mysql.createConnection(connConfig);
@@ -73,15 +80,19 @@ async function initDb() {
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS train_details (
-      trainNumber  VARCHAR(20) NOT NULL,
-      date         DATE        NOT NULL,
-      canceled     TINYINT(1),
-      isDelayed    TINYINT(1),
-      delayMinutes SMALLINT,
-      fetchedAt    DATETIME,
+      trainNumber    VARCHAR(20) NOT NULL,
+      date           DATE        NOT NULL,
+      canceled       TINYINT(1),
+      isDelayed      TINYINT(1),
+      delayMinutes   SMALLINT,
+      courseModified TINYINT(1),
+      source         VARCHAR(20),
+      fetchedAt      DATETIME,
       PRIMARY KEY (trainNumber, date)
     )
   `);
+  await pool.execute(`ALTER TABLE train_details ADD COLUMN IF NOT EXISTS courseModified TINYINT(1)`).catch(() => {});
+  await pool.execute(`ALTER TABLE train_details ADD COLUMN IF NOT EXISTS source VARCHAR(20)`).catch(() => {});
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS train_stops (
@@ -94,9 +105,11 @@ async function initDb() {
       platform      VARCHAR(20),
       isDelayed     TINYINT(1),
       segmentType   VARCHAR(60),
+      isDeleted     TINYINT(1),
       PRIMARY KEY (trainNumber, date, position)
     )
   `);
+  await pool.execute(`ALTER TABLE train_stops ADD COLUMN IF NOT EXISTS isDeleted TINYINT(1)`).catch(() => {});
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS train_disruptions (
@@ -174,50 +187,48 @@ async function saveEquipment(trainNumber, date, sets) {
 }
 
 async function saveDetail(trainNumber, date, detail) {
-  const stops       = detail.stops        || [];
-  const disruptions = detail.disruptions  || [];
+  const stops       = detail.stops || [];
+  const globalEvents = Array.isArray(detail.globalEvents) ? detail.globalEvents : [];
 
-  const delayed = stops.some(s => s.isDelayed) ? 1 : 0;
-  const DELETED_SEGMENT_TYPES = new Set([
-    'START_DISRUPTION_DELETED',
-    'STOP_DISRUPTION_DELETED',
-    'END_DISRUPTION_DELETED',
-    'STOP_ACTIVE_DISRUPTION_DELETED',
-  ]);
-  const canceled = disruptions.some(d => d.type === 'DISRUPTION_DELETED') ||
-    (stops.length > 0 && stops.every(s => DELETED_SEGMENT_TYPES.has(s.segmentType))) ? 1 : 0;
+  const canceled       = detail.deleted        ? 1 : 0;
+  const courseModified = detail.courseModified  ? 1 : 0;
+  const source         = detail.source          || null;
+
+  const delayed = stops.some(s => !s.isDeleted && (s.departureDelayMin != null || s.arrivalDelayMin != null)) ? 1 : 0;
 
   let delayMinutes = 0;
-  const firstDelayed = stops.find(s => s.isDelayed && s.realTime && s.scheduledTime);
-  if (firstDelayed) {
-    delayMinutes = timeToMinutes(firstDelayed.realTime) - timeToMinutes(firstDelayed.scheduledTime);
-  }
+  const firstDelayed = stops.find(s => !s.isDeleted && s.departureDelayMin != null);
+  if (firstDelayed) delayMinutes = firstDelayed.departureDelayMin;
 
   await pool.execute(
-    `INSERT INTO train_details (trainNumber, date, canceled, isDelayed, delayMinutes, fetchedAt)
-     VALUES (?, ?, ?, ?, ?, NOW())
+    `INSERT INTO train_details (trainNumber, date, canceled, isDelayed, delayMinutes, courseModified, source, fetchedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
      ON DUPLICATE KEY UPDATE
        canceled = VALUES(canceled), isDelayed = VALUES(isDelayed),
-       delayMinutes = VALUES(delayMinutes), fetchedAt = NOW()`,
-    [trainNumber, date, canceled, delayed, delayMinutes]
+       delayMinutes = VALUES(delayMinutes), courseModified = VALUES(courseModified),
+       source = VALUES(source), fetchedAt = NOW()`,
+    [trainNumber, date, canceled, delayed, delayMinutes, courseModified, source]
   );
 
   await pool.execute('DELETE FROM train_stops WHERE trainNumber = ? AND date = ?', [trainNumber, date]);
   for (let i = 0; i < stops.length; i++) {
     const s = stops[i];
+    const isDelayed   = (s.departureDelayMin != null || s.arrivalDelayMin != null) ? 1 : 0;
+    const schedTime   = extractTime(s.scheduledDeparture ?? s.scheduledArrival);
+    const realTime    = extractTime(s.realDeparture ?? s.realArrival);
     await pool.execute(
-      `INSERT INTO train_stops (trainNumber, date, position, station, scheduledTime, realTime, platform, isDelayed, segmentType)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [trainNumber, date, i + 1, s.station, s.scheduledTime || null, s.realTime || null,
-       s.platform || null, s.isDelayed ? 1 : 0, s.segmentType || null]
+      `INSERT INTO train_stops (trainNumber, date, position, station, scheduledTime, realTime, platform, isDelayed, segmentType, isDeleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [trainNumber, date, i + 1, s.location || null, schedTime, realTime,
+       null, isDelayed, null, s.isDeleted ? 1 : 0]
     );
   }
 
   await pool.execute('DELETE FROM train_disruptions WHERE trainNumber = ? AND date = ?', [trainNumber, date]);
-  for (const d of disruptions) {
+  for (const e of globalEvents) {
     await pool.execute(
       `INSERT INTO train_disruptions (trainNumber, date, disruptionType, title, message) VALUES (?, ?, ?, ?, ?)`,
-      [trainNumber, date, d.type || null, d.title || null, d.message || null]
+      [trainNumber, date, e.category || null, e.title || null, e.text || null]
     );
   }
 

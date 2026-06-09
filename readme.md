@@ -1,44 +1,38 @@
 # RER E Stats — Collecte de la composition des trains
 
-Système automatisé de collecte et d'enregistrement de la composition du matériel roulant des trains du RER E, à partir de l'API Transilien.
+Système automatisé de collecte et d'enregistrement de la composition et des perturbations des trains du RER E, à partir de l'API Transilien et de l'API SNCF Connect.
 
 ---
 
 ## Objectif
 
-Le RER E circule avec différents types de matériel roulant (RER NG, MI2N, etc.) et peut circuler en composition simple ou couplée. L'objectif de ce projet est de **collecter automatiquement chaque jour la composition de chaque train** afin de constituer une base de données statistique exploitable.
+Le RER E circule avec différents types de matériel roulant (RER NG, MI2N, Francilien) en composition simple (US) ou couplée (UM). L'objectif est de **collecter automatiquement chaque jour la composition et les perturbations de chaque train** afin de constituer une base de données statistique exploitable.
 
 ---
 
 ## Architecture générale
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                     VPS (Node.js)                   │
-│                                                     │
-│  ┌─────────────┐     ┌──────────────┐               │
-│  │  Cron 4h30  │────▶│  Collecte    │               │
-│  │  (node-cron)│     │  timetable   │               │
-│  └─────────────┘     └──────┬───────┘               │
-│                             │                       │
-│                             ▼                       │
-│                      ┌──────────────┐               │
-│                      │  Base MySQL  │               │
-│                      │  (queue)     │               │
-│                      └──────┬───────┘               │
-│                             │                       │
-│  ┌─────────────┐            ▼                       │
-│  │  Cron 1min  │────▶ ┌──────────────┐              │
-│  │  (scheduler)│      │  Collecte    │              │
-│  └─────────────┘      │  equipment   │              │
-│                       └──────┬───────┘              │
-│                              │                      │
-│                              ▼                      │
-│                       ┌──────────────┐              │
-│                       │  API locale  │              │
-│                       │  Transilien  │              │
-│                       └──────────────┘              │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                        VPS (Node.js)                           │
+│                                                                │
+│  ┌─────────────┐    ┌─────────────────┐                        │
+│  │  Cron 4h30  │───▶│ Collecte        │                        │
+│  │  (node-cron)│    │ timetable       │                        │
+│  └─────────────┘    └───────┬─────────┘                        │
+│                             │                                  │
+│                             ▼                                  │
+│                      ┌──────────────┐                          │
+│                      │  Base MySQL  │                          │
+│                      │  (5 tables)  │                          │
+│                      └──────┬───────┘                          │
+│                             │                                  │
+│  ┌─────────────┐            ▼                                  │
+│  │  Cron 1min  │───▶ ┌─────────────────────────────────────┐   │
+│  │  (scheduler)│     │  Queue equipment  Queue detail       │   │
+│  └─────────────┘     │  (Transilien)     (SNCF Connect)    │   │
+│                      └─────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -47,7 +41,7 @@ Le RER E circule avec différents types de matériel roulant (RER NG, MI2N, etc.
 
 ### Phase 1 — Collecte des trains du jour (4h30)
 
-Un cron se déclenche à **4h30 chaque matin** et effectue 8 appels à l'API `/timetable` pour récupérer tous les trains prévus sur la journée, couvrant l'ensemble des branches du RER E dans les deux sens.
+Un cron se déclenche à **4h30 chaque matin** (heure de Paris) et effectue 8 appels à l'API `/timetable`, couvrant toutes les branches du RER E dans les deux sens.
 
 Chaque appel est filtré par **code mission** pour éviter tout doublon :
 
@@ -62,68 +56,126 @@ Chaque appel est filtré par **code mission** pour éviter tout doublon :
 | 7 | Magenta | Nanterre La Folie | `NOMY` |
 | 8 | Nanterre La Folie | Magenta | `MONY` |
 
-> Les appels 7 et 8 couvrent les trains du tronçon central uniquement (Magenta ou Haussmann comme terminus), en utilisant Magenta comme point de référence pour capturer tous les cas.
+> Les 8 appels sont espacés de **5 minutes** (durée totale ~35 min).
 
-> Les 8 appels sont espacés de 2 minutes, soit une durée totale d'environ 16 minutes.
+> Les appels 7 et 8 couvrent les trains du tronçon central (Magenta ou Haussmann comme terminus).
 
-Les trains collectés sont insérés en base avec le statut `pending`.
+**Stratégie de retry timetable :**
+- 2 tentatives par appel (retry après 5 min, ou 30 min si 429)
+- Si les 2 tentatives échouent → retry global **2h après** pour les appels ratés
 
 ---
 
-### Phase 2 — Collecte de la composition (toute la journée)
+### Phase 2 — Collecte de la composition (Transilien)
 
-Un second cron tourne **toutes les minutes** et interroge la base pour trouver les trains éligibles :
+Un cron tourne **toutes les minutes** et interroge les trains avec `equipmentStatus = 'pending'` dont le départ est passé depuis **5 min**. Pour chaque train, un appel est effectué sur `/api/transilien/equipment/:number/:date`.
 
-```sql
-SELECT * FROM trains
-WHERE status = 'pending'
-AND departureTime <= NOW() - INTERVAL 5 MINUTE
-AND (nextRetryAt IS NULL OR nextRetryAt <= NOW())
-```
-
-Pour chaque train trouvé, un appel est effectué sur `/api/transilien/equipment/:trainNumber/:date`.
-
-**Stratégie de retry :**
+**Stratégie de retry equipment :**
 
 | Tentative | Déclenchement | Action si échec |
 |-----------|--------------|-----------------|
-| 1 | T+5 min après départ | Planifie retry à T+15 min |
-| 2 | T+15 min | Planifie retry à T+25 min |
+| 1 | T+5 min après départ | Retry à T+15 min |
+| 2 | T+15 min | Retry à T+25 min |
 | 3 | T+25 min | Marque `unknown` |
 
-> Les appels sont espacés d'au moins **10 secondes** pour ne pas surcharger l'API Transilien.
+**Gestion des erreurs HTTP :**
+
+| Code | Action | Tentative consommée |
+|------|--------|---------------------|
+| 429 | Retry dans 60 min | Non |
+| 5xx | Retry dans 60 min | Non |
+| 401 | Retry dans 2h + log ERROR | Non |
+| 404 | Marque `unknown` immédiatement | Oui |
+
+> Appels espacés de **10 secondes**.
+
+---
+
+### Phase 3 — Collecte des perturbations (SNCF Voyageurs / SNCF Connect)
+
+Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée est passée depuis **1 heure**. Un appel est effectué sur `/api/train/:number/:date` (route unifiée) — **SNCF Voyageurs en priorité** (source publique, sans anti-bot), SNCF Connect en fallback.
+
+**Détection de l'arrivée :**
+- Train **supprimé** (`deleted: true`) → considéré terminé
+- Terminus avec **`arrivalDelayMin` nul** ou **`realArrival` confirmé** → considéré arrivé
+- Terminus **encore en retard** (`arrivalDelayMin != null` et `realArrival` absent) → retry dans 60 min sans consommer de tentative
+
+**Stratégie de retry detail** : identique à l'equipment.
 
 ---
 
 ## Structure de la base de données
 
-### Table `trains`
+### `trains` — horaires + statuts de collecte
 
 | Colonne | Type | Description |
-|--------|------|-------------|
-| `trainNumber` | VARCHAR(20) | Numéro du train |
-| `date` | DATE | Date de circulation |
-| `mission` | VARCHAR(10) | Code mission (ex: NOVY) |
-| `departureStation` | VARCHAR(100) | Gare de départ |
-| `departureTime` | DATETIME | Heure de départ |
-| `arrivalStation` | VARCHAR(100) | Gare d'arrivée |
-| `arrivalTime` | DATETIME | Heure d'arrivée |
-| `composition` | JSON | Sets retournés par `/equipment` |
-| `fetchedAt` | DATETIME | Horodatage de la collecte |
-| `retries` | INT | Nombre de tentatives effectuées |
-| `nextRetryAt` | DATETIME | Prochaine tentative planifiée |
-| `status` | ENUM | `pending` / `ok` / `unknown` |
+|---------|------|-------------|
+| `trainNumber` | VARCHAR(20) PK | Numéro du train |
+| `date` | DATE PK | Date de circulation |
+| `mission` | VARCHAR(10) | Code mission (NOCY, NOVY…) |
+| `departureStation` | VARCHAR(100) | |
+| `departureTime` | DATETIME | |
+| `arrivalStation` | VARCHAR(100) | |
+| `arrivalTime` | DATETIME | |
+| `formation` | ENUM('US','UM') | Unité Simple / Multiple |
+| `equipmentStatus` | ENUM('pending','ok','unknown') | |
+| `equipmentRetries` | TINYINT | |
+| `equipmentRetryAt` | DATETIME | |
+| `equipmentFetchedAt` | DATETIME | |
+| `detailStatus` | ENUM('pending','ok','unknown') | |
+| `detailRetries` | TINYINT | |
+| `detailRetryAt` | DATETIME | |
 
-**Clé primaire** : `(trainNumber, date)`
+### `train_sets` — composition Transilien (une rame par ligne)
 
-### Exemple de `composition` stockée
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `trainNumber` | VARCHAR(20) PK | |
+| `date` | DATE PK | |
+| `position` | TINYINT PK | 1 (US), 1+2 (UM) |
+| `rollingStock` | ENUM('RERNG','MI2N','NAT') | |
+| `coaches` | TINYINT | Nombre de voitures |
 
-```json
-[
-  { "commercialName": "RER NG", "coaches": 6, "image": "RERNG_blueIDFM_6C" },
-  { "commercialName": "RER NG", "coaches": 6, "image": "RERNG_blueIDFM_6C" }
-]
-```
+> "Francilien" retourné par l'API est mappé sur `NAT`.
+
+### `train_details` — résumé SNCF Voyageurs / SNCF Connect
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `trainNumber` | VARCHAR(20) PK | |
+| `date` | DATE PK | |
+| `canceled` | TINYINT(1) | Train supprimé (`deleted`) |
+| `isDelayed` | TINYINT(1) | Au moins un arrêt en retard |
+| `delayMinutes` | SMALLINT | Retard au premier arrêt concerné (minutes) |
+| `courseModified` | TINYINT(1) | Parcours modifié (arrêts supprimés, nouvelle origine/terminus) |
+| `source` | VARCHAR(20) | `sncf-voyageurs` ou `sncf-connect` |
+| `fetchedAt` | DATETIME | |
+
+### `train_stops` — arrêts (un arrêt par ligne)
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `trainNumber` | VARCHAR(20) PK | |
+| `date` | DATE PK | |
+| `position` | TINYINT PK | Ordre dans le parcours |
+| `station` | VARCHAR(100) | Nom de la gare (`location` SNCF Voyageurs) |
+| `scheduledTime` | TIME | Heure prévue (départ ou arrivée) |
+| `realTime` | TIME | Heure réelle — NULL si à l'heure |
+| `platform` | VARCHAR(20) | NULL avec SNCF Voyageurs (disponible uniquement SNCF Connect) |
+| `isDelayed` | TINYINT(1) | `departureDelayMin` ou `arrivalDelayMin` non nul |
+| `segmentType` | VARCHAR(60) | NULL avec SNCF Voyageurs (héritage SNCF Connect) |
+| `isDeleted` | TINYINT(1) | Arrêt supprimé (`stop.isDeleted`) |
+
+### `train_disruptions` — perturbations SNCF Connect (une par ligne)
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| `id` | INT AUTO_INCREMENT PK | |
+| `trainNumber` | VARCHAR(20) | |
+| `date` | DATE | |
+| `disruptionType` | VARCHAR(60) | DISRUPTION_DELETED, DISRUPTION_LIMITATION… |
+| `title` | VARCHAR(200) | |
+| `message` | TEXT | |
 
 ---
 
@@ -134,13 +186,15 @@ transilien_stats/
 ├── .env                # Variables d'environnement (ne pas commiter)
 ├── .env.example        # Template à commiter
 ├── config.js           # Paramètres (lit le .env)
-├── db.js               # Connexion MySQL et requêtes
-├── collector.js        # Appels HTTP vers l'API Transilien
-├── scheduler.js        # Cron de collecte composition (toutes les minutes)
-├── logger.js           # Logger console + fichier
-├── collect-now.js      # Collecte timetable manuelle (hors cron)
+├── db.js               # Connexion MySQL, création des tables, requêtes
+├── collector.js        # Appels HTTP (Transilien + SNCF Connect)
+├── scheduler.js        # Cron 1 min — queues equipment et detail
+├── timetable.js        # Collecte timetable avec retry
+├── logger.js           # Logger console + fichier (heure de Paris)
+├── utils.js            # Utilitaires timezone (nowParis, todayParis)
+├── collect-now.js      # Collecte timetable manuelle
 ├── index.js            # Point d'entrée + cron 4h30
-├── logs/               # Logs journaliers (ignoré par git)
+├── logs/               # Logs journaliers YYYY-MM-DD.log (ignoré par git)
 └── package.json
 ```
 
@@ -160,9 +214,9 @@ DB_PASSWORD=
 DB_NAME=rer_e_stats
 ```
 
-L'authentification sur l'API Transilien se fait via le header `X-API-Key`.
+L'authentification sur l'API se fait via le header `X-API-Key`.
 
-La base de données et la table `trains` sont créées automatiquement au démarrage si elles n'existent pas. L'utilisateur MySQL doit avoir les droits `ALL PRIVILEGES` sur la base.
+Les 5 tables sont créées automatiquement au démarrage. L'utilisateur MySQL doit avoir les droits `ALL PRIVILEGES` sur la base. Si MySQL connecte via `127.0.0.1` plutôt que `localhost`, accorder les droits sur les deux hosts.
 
 ---
 
@@ -172,7 +226,7 @@ La base de données et la table `trains` sont créées automatiquement au démar
 |-----------|------------|
 | Runtime | Node.js |
 | Scheduler | node-cron |
-| Base de données | MySQL |
+| Base de données | MySQL 8+ |
 | Driver MySQL | mysql2 |
 | HTTP client | axios |
 | Variables d'env | dotenv |
@@ -186,13 +240,14 @@ npm install
 node index.js
 ```
 
-La collecte timetable se déclenche automatiquement à **4h30**. Pour lancer une collecte manuellement (test ou rattrapage) :
+La collecte timetable se déclenche automatiquement à **4h30**. Pour lancer une collecte manuellement :
 
 ```bash
-node collect-now.js
+node collect-now.js              # Aujourd'hui
+node collect-now.js 2026-06-01   # Date spécifique
 ```
 
-> En production, utiliser **PM2** pour maintenir le processus actif :
+> En production, utiliser **PM2** :
 > ```bash
 > pm2 start index.js --name transilien_stats
 > pm2 save
@@ -202,19 +257,25 @@ node collect-now.js
 
 ## Logs
 
-Les logs sont écrits simultanément dans la console et dans `logs/YYYY-MM-DD.log` (un fichier par jour).
+Un fichier par jour dans `logs/YYYY-MM-DD.log`, en heure de Paris.
 
 ```
-[2026-06-01 04:30:00] [INFO ] TIMETABLE | Début de la collecte pour le 2026-06-01
-[2026-06-01 09:12:01] [INFO ] APPEL API | 119002 | 2026-06-01 | mission NOVY
-[2026-06-01 09:12:02] [OK   ] OK        | 119002 | 2026-06-01 | RER NG (6C) + RER NG (6C)
-[2026-06-01 09:14:00] [WARN ] RETRY 1   | 119108 | 2026-06-01 | prochain dans 10 min
+[2026-06-04 04:30:00] [INFO ] TIMETABLE | Collecte du 2026-06-04
+[2026-06-04 10:15:01] [OK   ] EQUIP OK        | 119002 | 2026-06-04 | RER NG (6C) + RER NG (6C)
+[2026-06-04 10:15:11] [WARN ] EQUIP VIDE      | 118108 | 2026-06-04
+[2026-06-04 11:20:00] [OK   ] DETAIL OK       | 119002 | 2026-06-04 | retard
+[2026-06-04 11:20:00] [WARN ] DETAIL EN ROUTE | 118200 | 2026-06-04 | pas encore arrivé — retry dans 60 min
+[2026-06-04 11:20:00] [WARN ] DETAIL 404      | 116050 | 2026-06-04 | marqué unknown
 ```
 
 ---
 
 ## Limites connues
 
-- L'API Transilien peut retourner `sets: []` si le train est trop loin dans le futur ou annulé. Les trains non résolus après 3 tentatives sont marqués `unknown`.
-- Les trains circulant uniquement sur le tronçon central peuvent avoir **Magenta** ou **Haussmann** comme terminus selon les jours ; l'appel depuis Magenta couvre les deux cas.
-- Le numéro de train (`trainNumber`) est supposé unique sur une journée donnée — c'est la clé primaire retenue.
+- L'API Transilien retourne `sets: []` si la composition n'est pas encore disponible ou si le train est annulé. Après 3 tentatives → `unknown`.
+- SNCF Voyageurs (source principale) est publique — pas de risque de ban Datadome. SNCF Connect reste le fallback.
+- Avec SNCF Voyageurs, `platform` et `segmentType` sont toujours `NULL` dans `train_stops`.
+- En cas de fallback SNCF Connect (source `sncf-connect`), `departureDelayMin` est `null` et les horaires sont au format `HH:MM`.
+- SNCF Connect utilise Datadome (anti-bot). En cas de ban (403/503) affectant le fallback, renouveler les cookies dans l'API locale.
+- Les trains du tronçon central peuvent avoir Magenta ou Haussmann comme terminus selon les jours.
+- Le numéro de train est supposé unique par journée — c'est la clé primaire de `trains`.

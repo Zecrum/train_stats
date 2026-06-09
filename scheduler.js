@@ -13,28 +13,22 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 let isRunning = false;
 let lastDetailAt = 0;
-const DETAIL_COOLDOWN = 2 * 60 * 1000;
+const DETAIL_COOLDOWN = 10 * 1000;
 
-const DELETED_SEGMENT_TYPES = new Set([
-  'START_DISRUPTION_DELETED',
-  'STOP_DISRUPTION_DELETED',
-  'END_DISRUPTION_DELETED',
-  'STOP_ACTIVE_DISRUPTION_DELETED',
-]);
+function hasTrainArrived(detail) {
+  if (detail.deleted) return true;
 
-function hasTrainArrived(stops) {
+  const stops = detail.stops || [];
   if (stops.length === 0) return true;
 
-  const activeStops = stops.filter(s => !DELETED_SEGMENT_TYPES.has(s.segmentType));
+  const activeStops = stops.filter(s => !s.isDeleted);
   if (activeStops.length === 0) return true;
 
-  const terminus = activeStops.find(s => s.segmentType === 'END_ACTIVE_SEGMENT')
-    ?? activeStops[activeStops.length - 1];
+  const terminus = activeStops[activeStops.length - 1];
 
-  // Toujours en route : terminus en retard sans heure réelle confirmée
-  if (terminus.isDelayed && !terminus.realTime) return false;
+  // Encore en route : retard annoncé au terminus mais pas encore arrivé (realArrival non confirmé)
+  if (terminus.arrivalDelayMin != null && !terminus.realArrival) return false;
 
-  // À l'heure (realTime null normal) ou arrivé avec confirmation
   return true;
 }
 
@@ -149,22 +143,25 @@ async function processDetailQueue() {
       lastDetailAt = Date.now();
       const stops = detail.stops || [];
 
-      if (!hasTrainArrived(stops)) {
+      if (!hasTrainArrived(detail)) {
         await scheduleDetailRetry(train.trainNumber, train.date, train.detailRetries, 60);
         logger.warn(`DETAIL EN ROUTE | ${train.trainNumber} | ${train.date} | pas encore arrivé — retry dans 60 min`);
       } else {
         await saveDetail(train.trainNumber, train.date, detail);
         const flags = [];
-        if (detail.disruptions?.length) flags.push(`${detail.disruptions.length} perturbation(s)`);
-        if (stops.some(s => s.isDelayed)) flags.push('retard');
-        if (stops.some(s => s.segmentType === 'STOP_DISRUPTION_DELETED')) flags.push('arrêt(s) supprimé(s)');
+        const globalEvents = Array.isArray(detail.globalEvents) ? detail.globalEvents : [];
+        if (globalEvents.length) flags.push(`${globalEvents.length} événement(s)`);
+        if (detail.courseModified) flags.push('parcours modifié');
+        if (detail.deleted) flags.push('supprimé');
+        if (stops.some(s => s.departureDelayMin != null)) flags.push('retard');
+        if (stops.some(s => s.isDeleted)) flags.push('arrêt(s) supprimé(s)');
         logger.ok(`DETAIL OK       | ${train.trainNumber} | ${train.date}${flags.length ? ' | ' + flags.join(', ') : ''}`);
       }
     } catch (err) {
       lastDetailAt = Date.now();
       await handleDetailError(train, err);
     }
-    await sleep(config.scheduler.detailCallSpacing);
+    await sleep(config.scheduler.equipmentCallSpacing);
   }
 }
 
@@ -174,8 +171,7 @@ async function processQueues() {
   if (isRunning) return;
   isRunning = true;
   try {
-    await processEquipmentQueue();
-    await processDetailQueue();
+    await Promise.all([processEquipmentQueue(), processDetailQueue()]);
   } catch (err) {
     logger.error(`SCHEDULER | Erreur inattendue : ${err.message}`);
   } finally {

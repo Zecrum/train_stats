@@ -27,14 +27,19 @@ API-Train/
 │   ├── src/
 │   │   ├── app.ts               # Point d'entrée, middlewares globaux
 │   │   ├── routes/
-│   │   │   ├── auth.routes.ts   # POST /api/auth/login
-│   │   │   ├── station.routes.ts
-│   │   │   ├── train.routes.ts
-│   │   │   └── transilien.routes.ts
+│   │   │   ├── auth.routes.ts          # POST /api/auth/login
+│   │   │   ├── station.routes.ts       # GET /api/station/*
+│   │   │   ├── train.routes.ts         # GET /api/train/* (unifié + SNCF Connect)
+│   │   │   ├── transilien.routes.ts    # GET /api/transilien/*
+│   │   │   └── sncfvoyageurs.routes.ts # GET /api/sncf-voyageurs/*
 │   │   ├── services/
 │   │   │   ├── sncfconnect.service.ts
 │   │   │   ├── transilien.service.ts
+│   │   │   ├── sncfvoyageurs.service.ts
 │   │   │   └── database.service.ts
+│   │   ├── types/
+│   │   │   ├── sncf.types.ts
+│   │   │   └── sncfvoyageurs.types.ts
 │   │   ├── middleware/
 │   │   │   ├── auth.middleware.ts
 │   │   │   └── cache.middleware.ts
@@ -280,18 +285,75 @@ GET /api/station/:id/disruptions
 
 ---
 
-### Trains — SNCF Connect
+### Trains
 
-#### Détail d'un train
+#### Route unifiée (recommandée)
+
+```
+GET /api/train/:number/:date
+```
+
+Essaie **SNCF Voyageurs** en priorité. Si indisponible, bascule automatiquement sur **SNCF Connect**. Un champ `source` indique laquelle a répondu.
+
+| Paramètre | Format | Exemple |
+|-----------|--------|---------|
+| `number` | Numéro de circulation | `118131` |
+| `date` | `YYYY-MM-DD` | `2026-06-04` |
+
+```bash
+GET /api/train/118131/2026-06-09
+```
+
+**Train supprimé :**
+```json
+{ "source": "sncf-voyageurs", "deleted": true, "trainNumber": "120058", "circulationDate": "2026-06-04" }
+```
+
+**Train normal ou perturbé :**
+```json
+{
+  "source": "sncf-voyageurs",
+  "trainNumber": "118131",
+  "circulationDate": "2026-06-09",
+  "trainType": "RER E - TANU",
+  "line": "E",
+  "deleted": false,
+  "courseModified": false,
+  "created": false,
+  "stops": [
+    {
+      "location": "Nanterre La Folie",
+      "scheduledDeparture": "2026-06-09T10:04:00+02:00",
+      "realDeparture": "2026-06-09T10:17:00+02:00",
+      "departureDelayMin": 13,
+      "scheduledArrival": null,
+      "realArrival": null,
+      "arrivalDelayMin": null,
+      "isDeleted": false,
+      "forbiddenExit": true,
+      "forbiddenEntrance": false,
+      "events": []
+    }
+  ],
+  "globalEvents": []
+}
+```
+
+> Quand la source est `sncf-connect` (fallback), `departureDelayMin` est `null` (les horaires sont au format `HH:MM`) et `forbiddenExit`/`forbiddenEntrance` sont `null`.
+
+**Erreurs :**
+- `404` — Train introuvable sur les deux sources
+- `502` — Les deux sources sont indisponibles
+
+---
+
+#### Détail brut SNCF Connect (avec composition)
 
 ```
 GET /api/train/detail/:number/:date
 ```
 
-| Paramètre | Format | Exemple |
-|-----------|--------|---------|
-| `number` | Numéro du train | `6201` |
-| `date` | `YYYY-MM-DD` | `2026-06-03` |
+Route directe vers SNCF Connect uniquement. Utile pour récupérer la **composition du matériel roulant**.
 
 ```bash
 GET /api/train/detail/118133/2026-06-03
@@ -320,16 +382,6 @@ GET /api/train/detail/118133/2026-06-03
   }
 }
 ```
-
-**Valeurs de `segmentType` :**
-
-| Valeur | Signification |
-|--------|---------------|
-| `STOP_ACTIVE_SEGMENT` | Arrêt normal |
-| `END_ACTIVE_SEGMENT` | Terminus |
-| `START_ACTIVE_DISRUPTION_LIMITED` | Nouvelle gare de départ (perturbation) |
-| `STOP_DISRUPTION_DELETED` | Arrêt supprimé |
-| `STOP_ACTIVE_DISRUPTION_DELETED` | Arrêt supprimé dans un tronçon actif |
 
 **Erreurs :**
 - `404` — Train introuvable pour ce numéro et cette date
@@ -436,6 +488,106 @@ GET /api/transilien/equipment/119106/2026-06-03
 ```
 
 > Train annulé ou date trop éloignée → `"sets": []`
+
+---
+
+### SNCF Voyageurs
+
+Source publique de sncf-voyageurs.com exposant les retards, suppressions, modifications de parcours et trains supplémentaires.
+
+#### Détail d'un train
+
+```
+GET /api/sncf-voyageurs/train/:number/:date
+```
+
+| Paramètre | Format | Exemple |
+|-----------|--------|---------|
+| `number` | Numéro de circulation | `118131` |
+| `date` | `YYYY-MM-DD` | `2026-06-09` |
+
+```bash
+GET /api/sncf-voyageurs/train/118131/2026-06-09
+```
+
+**Train supprimé** (tableau vide côté API) :
+```json
+{ "deleted": true, "circulationNumber": "120058", "circulationDate": "2026-06-04" }
+```
+
+**Train normal ou perturbé :**
+```json
+{
+  "circulationNumber": "118131",
+  "trainType": "RER E - TANU",
+  "trainName": "RER E - TANU",
+  "line": "E",
+  "circulationDate": "2026-06-09",
+  "destinationCode": "87116210",
+  "deleted": false,
+  "created": false,
+  "courseModified": false,
+  "stopsNb": 14,
+  "durationMin": 54,
+  "stops": [
+    {
+      "location": { "code": "87386011", "label": "Nanterre La Folie" },
+      "scheduledDeparture": "2026-06-09T10:04:00+02:00",
+      "realDeparture": "2026-06-09T10:17:00+02:00",
+      "scheduledArrival": null,
+      "realArrival": null,
+      "departureDelayMin": 13,
+      "arrivalDelayMin": null,
+      "stopDuration": null,
+      "forbiddenExit": true,
+      "forbiddenEntrance": false,
+      "events": []
+    }
+  ],
+  "globalEvents": {},
+  "services": [],
+  "reservations": []
+}
+```
+
+**Flags de statut :**
+
+| Champ | Signification |
+|-------|---------------|
+| `deleted` | Train entièrement supprimé |
+| `created` | Train supplémentaire non prévu |
+| `courseModified` | Parcours modifié (arrêts supprimés, nouvelle origine/terminus) |
+
+**Champs par arrêt :**
+
+| Champ | Description |
+|-------|-------------|
+| `departureDelayMin` | Retard au départ en minutes (`null` si à l'heure) |
+| `arrivalDelayMin` | Retard à l'arrivée en minutes (`null` si à l'heure) |
+| `forbiddenExit` | Descente interdite (gare d'origine du train) |
+| `forbiddenEntrance` | Montée interdite (terminus) |
+| `events` | Événements sur cet arrêt (retard, suppression, nouvelle origine…) |
+
+**Catégories d'événements (`category`) et titres (`title`) :**
+
+| `category` | `title` | Signification |
+|------------|---------|---------------|
+| `delay` | `delay_departure` | Retard au départ |
+| `delay` | `delay_arrival` | Retard à l'arrivée |
+| `course_modified` | `deletion` | Arrêt supprimé sur cet arrêt |
+| `more_stops` | `origin.old` | Ancienne gare de départ (supprimée) |
+| `more_stops` | `origin.new` | Nouvelle gare de départ |
+| `more_stops` | `destination.old` | Ancien terminus (supprimé) |
+| `more_stops` | `destination.new` | Nouveau terminus |
+| `deleted` | `deletion.total` | Train entièrement supprimé (aussi dans `globalEvents`) |
+| `created` | `course.modified` | Train supplémentaire non prévu |
+| `works` | — | Travaux (détail dans `text`) |
+| `information` | `normal_departure` / `normal_arrival` | Départ/arrivée normal |
+
+**Configuration optionnelle dans `.env` :**
+```env
+SNCFV_BASIC_AUTH=base64(user:password)
+```
 
 ---
 
@@ -604,26 +756,3 @@ cd front && npm run build
 # Copier front/dist/ sur le serveur
 ```
 
-**Configuration nginx dans aaPanel (Site → Config) :**
-
-```nginx
-root /chemin/vers/front/dist;
-index index.html;
-
-# Vue Router history mode — indispensable pour éviter les 404 au F5
-location / {
-    try_files $uri $uri/ /index.html;
-}
-
-# Proxy vers l'API Express
-location /api {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
-
-> Sans `try_files`, un F5 sur `/login` renvoie une erreur 404 nginx car le fichier n'existe pas physiquement.
