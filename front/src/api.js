@@ -11,7 +11,9 @@ async function get(path, params = {}) {
 }
 
 export const api = {
-  daily:          (date)       => get("/stats/daily",           { date }),
-  hourly:         (date, branch) => get("/stats/hourly", { date, branch }),
-  evolution:      (days, end)  => get("/stats/evolution",       { days, end }),
+  daily:       (date)         => get("/stats/daily",       { date }),
+  hourly:      (date, branch) => get("/stats/hourly",      { date, branch }),
+  evolution:   (days, end)    => get("/stats/evolution",   { days, end }),
+  disruptions:         (days, end)    => get("/stats/disruptions",          { days, end }),
+  hourlyDisruptions:   (date)         => get("/stats/hourly-disruptions",   { date }),
 };

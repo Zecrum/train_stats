@@ -12,22 +12,18 @@ const BRANCH_DEF = [
   { key: "Central",  label: "Tronçon central",    missions: ["NOMY","MONY"] },
 ];
 function mIn(ms) { return `mission IN (${ms.map(m => `'${m}'`).join(",")})`; }
-const BRANCHES       = Object.fromEntries(BRANCH_DEF.map(b => [b.key, { label: b.label, missions: b.missions.join(" · ") }]));
-const BRANCH_CASE    = `CASE ${BRANCH_DEF.map(b => `WHEN ${mIn(b.missions)} THEN '${b.key}'`).join(" ")} END`;
-const KNOWN_MISSIONS = mIn(BRANCH_DEF.flatMap(b => b.missions));
+const BRANCHES        = Object.fromEntries(BRANCH_DEF.map(b => [b.key, { label: b.label, missions: b.missions.join(" · ") }]));
+const BRANCH_CASE     = `CASE ${BRANCH_DEF.map(b => `WHEN ${mIn(b.missions)} THEN '${b.key}'`).join(" ")} END`;
+const KNOWN_MISSIONS  = mIn(BRANCH_DEF.flatMap(b => b.missions));
 const BRANCH_MISSIONS = Object.fromEntries(BRANCH_DEF.map(b => [b.key, mIn(b.missions)]));
 
-const MAT_KEY = { "RER NG": "RERNG", "NAT": "NAT", "MI2N": "MI2N", "Francilien": "NAT" };
-
-const MAT_EXPR  = `JSON_UNQUOTE(JSON_EXTRACT(composition, '$[0].commercialName'))`;
-const COUP_EXPR = `IF(JSON_LENGTH(composition) > 1, 'um', 'us')`;
+// train_sets.rollingStock = ENUM('RERNG','MI2N','NAT') — valeurs déjà normalisées.
+const MAT_KEY = { RERNG: "RERNG", NAT: "NAT", MI2N: "MI2N" };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function parseDate(d) { return DATE_RE.test(d) ? d : today(); }
 
-function today() {
-  return new Date().toLocaleDateString("en-CA");
-}
+function today() { return new Date().toLocaleDateString("en-CA"); }
 function emptyMat()  { return { RERNG: 0, NAT: 0, MI2N: 0 }; }
 function emptyCoup() { return { um: 0, us: 0 }; }
 
@@ -39,27 +35,30 @@ router.get("/daily", async (req, res, next) => {
     const date = parseDate(req.query.date);
 
     const [[totals]] = await pool.query(
-      `SELECT COUNT(*)                AS total,
-              SUM(status = 'ok')      AS resolved,
-              SUM(status = 'unknown') AS unknown,
-              SUM(status = 'pending') AS pending
+      `SELECT COUNT(*)                         AS total,
+              SUM(equipmentStatus = 'ok')      AS resolved,
+              SUM(equipmentStatus = 'unknown') AS unknown,
+              SUM(equipmentStatus = 'pending') AS pending
          FROM trains
         WHERE date = ?`,
       [date]
     );
 
+    // Matériel : on joint train_sets (position = 1 = rame de tête) pour obtenir rollingStock.
     const [matRows] = await pool.query(
-      `SELECT ${MAT_EXPR} AS materiel, COUNT(*) AS n
-         FROM trains
-        WHERE date = ? AND status = 'ok'
+      `SELECT ts.rollingStock AS materiel, COUNT(*) AS n
+         FROM trains t
+         JOIN train_sets ts USING (trainNumber, date)
+        WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ts.position = 1
         GROUP BY materiel`,
       [date]
     );
 
+    // Couplage : la colonne formation (US/UM) est sur la table trains.
     const [coupRows] = await pool.query(
-      `SELECT ${COUP_EXPR} AS couplage, COUNT(*) AS n
+      `SELECT LOWER(formation) AS couplage, COUNT(*) AS n
          FROM trains
-        WHERE date = ? AND status = 'ok'
+        WHERE date = ? AND equipmentStatus = 'ok'
         GROUP BY couplage`,
       [date]
     );
@@ -67,15 +66,42 @@ router.get("/daily", async (req, res, next) => {
     // Une seule requête branche — GROUP BY 1 (positionnel) évite les ambiguïtés
     // d'alias dans GROUP BY selon la version MySQL/MariaDB.
     const [brRows] = await pool.query(
-      `SELECT ${BRANCH_CASE} AS branche,
-              COUNT(*) AS total,
-              SUM(${MAT_EXPR} = 'RER NG')             AS n_rerng,
-              SUM(${MAT_EXPR} IN ('NAT','Francilien')) AS n_nat,
-              SUM(${MAT_EXPR} = 'MI2N')               AS n_mi2n,
-              SUM(JSON_LENGTH(composition) > 1)        AS n_um
-         FROM trains
-        WHERE date = ? AND status = 'ok' AND ${KNOWN_MISSIONS}
+      `SELECT ${BRANCH_CASE}            AS branche,
+              COUNT(*)                  AS total,
+              SUM(ts.rollingStock = 'RERNG') AS n_rerng,
+              SUM(ts.rollingStock = 'NAT')   AS n_nat,
+              SUM(ts.rollingStock = 'MI2N')  AS n_mi2n,
+              SUM(t.formation = 'UM')        AS n_um
+         FROM trains t
+         JOIN train_sets ts USING (trainNumber, date)
+        WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ts.position = 1 AND ${KNOWN_MISSIONS}
         GROUP BY 1`,
+      [date]
+    );
+
+    // Perturbations — source SNCF Connect (detailStatus = 'ok').
+    // "n_delayed" évite le mot réservé DELAYED en MariaDB.
+    const [[disruptRow]] = await pool.query(
+      `SELECT COUNT(*)                                                 AS detail_total,
+              SUM(td.canceled)                                        AS canceled,
+              SUM(td.isDelayed = 1 AND td.canceled = 0
+                  AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
+              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
+              ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
+                             THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                        END))                                        AS avg_delay
+         FROM trains t
+         JOIN train_details td USING (trainNumber, date)
+         LEFT JOIN (
+           SELECT trainNumber, date,
+                  MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                           THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                           ELSE NULL END) AS max_delay
+             FROM train_stops
+            WHERE realTime IS NOT NULL AND isDelayed = 1
+            GROUP BY trainNumber, date
+         ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+        WHERE t.date = ? AND t.detailStatus = 'ok'`,
       [date]
     );
 
@@ -94,12 +120,12 @@ router.get("/daily", async (req, res, next) => {
       if (!b) return;
       const total = Number(r.total);
       const um    = Number(r.n_um) || 0;
-      b.total              = total;
-      b.material.RERNG     = Number(r.n_rerng) || 0;
-      b.material.NAT       = Number(r.n_nat)   || 0;
-      b.material.MI2N      = Number(r.n_mi2n)  || 0;
-      b.coupling.um        = um;
-      b.coupling.us        = total - um;
+      b.total          = total;
+      b.material.RERNG = Number(r.n_rerng) || 0;
+      b.material.NAT   = Number(r.n_nat)   || 0;
+      b.material.MI2N  = Number(r.n_mi2n)  || 0;
+      b.coupling.um    = um;
+      b.coupling.us    = total - um;
     });
 
     const resolved  = Number(totals.resolved) || 0;
@@ -110,14 +136,21 @@ router.get("/daily", async (req, res, next) => {
     res.set("Cache-Control", cacheFor(date));
     res.json({
       date,
-      total: Number(totals.total) || 0,  // toutes statuts confondus
-      collected,                          // ok + unknown (tentatives effectuées)
+      total: Number(totals.total) || 0,
+      collected,
       resolved,
       unknown,
       pending,
       material,
       coupling,
       branches,
+      disruptions: {
+        detail_total: Number(disruptRow.detail_total) || 0,
+        canceled:     Number(disruptRow.canceled)     || 0,
+        delayed:      Number(disruptRow.n_delayed)    || 0,
+        modified:     Number(disruptRow.n_modified)   || 0,
+        avg_delay:    disruptRow.avg_delay != null ? Number(disruptRow.avg_delay) : null,
+      },
     });
   } catch (e) { next(e); }
 });
@@ -133,7 +166,7 @@ router.get("/hourly", async (req, res, next) => {
     // Un train est compté dans le slot S s'il est EN CIRCULATION à ce moment.
     // Cas passant minuit : arrivalTime < departureTime → en service jusqu'au slot 95.
     const [rows] = await pool.query(
-      `SELECT s.slot, ${MAT_EXPR} AS materiel, COUNT(*) AS total
+      `SELECT s.slot, ts.rollingStock AS materiel, COUNT(*) AS total
          FROM (
            SELECT a.n * 16 + b.n AS slot
            FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2
@@ -153,13 +186,53 @@ router.get("/hourly", async (req, res, next) => {
            (TIME(t.arrivalTime) < TIME(t.departureTime)
             AND FLOOR((HOUR(t.departureTime) * 60 + MINUTE(t.departureTime)) / 15) <= s.slot)
          )
-        WHERE t.date = ? AND t.status = 'ok' ${branchFilter}
+         JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+        WHERE t.date = ? AND t.equipmentStatus = 'ok' ${branchFilter}
         GROUP BY s.slot, materiel
         ORDER BY s.slot`,
       [date]
     );
     res.set("Cache-Control", cacheFor(date));
     res.json(rows.map((r) => ({ slot: Number(r.slot), materiel: r.materiel, total: Number(r.total) })));
+  } catch (e) { next(e); }
+});
+
+/* -------------------------------------------------------------------------- */
+/* GET /api/stats/hourly-disruptions?date=YYYY-MM-DD                          */
+/* -------------------------------------------------------------------------- */
+router.get("/hourly-disruptions", async (req, res, next) => {
+  try {
+    const date = parseDate(req.query.date);
+    const [rows] = await pool.query(
+      `SELECT FLOOR((HOUR(t.departureTime) * 60 + MINUTE(t.departureTime)) / 15) AS slot,
+              SUM(td.canceled)                                                    AS n_canceled,
+              SUM(td.isDelayed = 1 AND td.canceled = 0 AND td.delayMinutes > 2)  AS n_delayed,
+              SUM(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
+                       THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                       ELSE 0 END)                                               AS total_delay
+         FROM trains t
+         JOIN train_details td USING (trainNumber, date)
+         LEFT JOIN (
+           SELECT trainNumber, date,
+                  MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                           THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                           ELSE NULL END) AS max_delay
+             FROM train_stops
+            WHERE realTime IS NOT NULL AND isDelayed = 1
+            GROUP BY trainNumber, date
+         ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+        WHERE t.date = ? AND t.detailStatus = 'ok'
+        GROUP BY slot
+        ORDER BY slot`,
+      [date]
+    );
+    res.set("Cache-Control", cacheFor(date));
+    res.json(rows.map((r) => ({
+      slot:        Number(r.slot),
+      n_canceled:  Number(r.n_canceled)  || 0,
+      n_delayed:   Number(r.n_delayed)   || 0,
+      total_delay: Number(r.total_delay) || 0,
+    })));
   } catch (e) { next(e); }
 });
 
@@ -171,17 +244,18 @@ router.get("/evolution", async (req, res, next) => {
     const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
     const end  = parseDate(req.query.end);
     const [rows] = await pool.query(
-      `SELECT date,
-              ROUND(100 * SUM(${MAT_EXPR} IN ('RER NG'))                    / COUNT(*)) AS pctRERNG,
-              ROUND(100 * SUM(${MAT_EXPR} IN ('NAT','Francilien'))           / COUNT(*)) AS pctNAT,
-              ROUND(100 * SUM(${MAT_EXPR} IN ('MI2N'))                      / COUNT(*)) AS pctMI2N,
-              ROUND(100 * SUM(JSON_LENGTH(composition) > 1) / COUNT(*)) AS pctCoupled,
+      `SELECT t.date,
+              ROUND(100 * SUM(ts.rollingStock = 'RERNG') / COUNT(*)) AS pctRERNG,
+              ROUND(100 * SUM(ts.rollingStock = 'NAT')   / COUNT(*)) AS pctNAT,
+              ROUND(100 * SUM(ts.rollingStock = 'MI2N')  / COUNT(*)) AS pctMI2N,
+              ROUND(100 * SUM(t.formation = 'UM')        / COUNT(*)) AS pctCoupled,
               COUNT(*) AS total
-         FROM trains
-        WHERE date BETWEEN (? - INTERVAL ? DAY) AND ?
-          AND status = 'ok'
-        GROUP BY date
-        ORDER BY date`,
+         FROM trains t
+         JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+        WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+          AND t.equipmentStatus = 'ok'
+        GROUP BY t.date
+        ORDER BY t.date`,
       [end, days - 1, end]
     );
     res.json(rows.map((r) => ({
@@ -195,8 +269,154 @@ router.get("/evolution", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* -------------------------------------------------------------------------- */
+/* GET /api/stats/disruptions?days=30&end=YYYY-MM-DD                          */
+/* -------------------------------------------------------------------------- */
+router.get("/disruptions", async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const end  = parseDate(req.query.end);
+
+    const [evoRows] = await pool.query(
+      `SELECT t.date,
+              COUNT(*)                                                 AS total,
+              SUM(td.canceled)                                        AS canceled,
+              SUM(td.isDelayed = 1 AND td.canceled = 0
+                  AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
+              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
+              ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
+                             THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                        END))                                        AS avg_delay
+         FROM trains t
+         JOIN train_details td USING (trainNumber, date)
+         LEFT JOIN (
+           SELECT trainNumber, date,
+                  MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                           THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                           ELSE NULL END) AS max_delay
+             FROM train_stops
+            WHERE realTime IS NOT NULL AND isDelayed = 1
+            GROUP BY trainNumber, date
+         ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+        WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+          AND t.detailStatus = 'ok'
+        GROUP BY t.date
+        ORDER BY t.date`,
+      [end, days - 1, end]
+    );
+
+    const [[distrib]] = await pool.query(
+      `SELECT SUM(eff_delay BETWEEN 3  AND 5)  AS d3_5,
+              SUM(eff_delay BETWEEN 6  AND 10) AS d6_10,
+              SUM(eff_delay BETWEEN 11 AND 20) AS d11_20,
+              SUM(eff_delay > 20)              AS d20plus
+         FROM (
+           SELECT COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
+             FROM trains t
+             JOIN train_details td USING (trainNumber, date)
+             LEFT JOIN (
+               SELECT trainNumber, date,
+                      MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                               THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                               ELSE NULL END) AS max_delay
+                 FROM train_stops
+                WHERE realTime IS NOT NULL AND isDelayed = 1
+                GROUP BY trainNumber, date
+             ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+            WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+              AND t.detailStatus = 'ok'
+              AND td.isDelayed = 1 AND td.canceled = 0
+         ) sub
+         WHERE eff_delay IS NOT NULL AND eff_delay > 0`,
+      [end, days - 1, end]
+    );
+
+    const [stationRows] = await pool.query(
+      `SELECT stops.station, COUNT(*) AS delayed_stops
+         FROM trains t
+         JOIN train_details td   USING (trainNumber, date)
+         JOIN train_stops   stops USING (trainNumber, date)
+        WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+          AND t.detailStatus = 'ok'
+          AND td.canceled = 0
+          AND stops.isDelayed = 1
+          AND stops.isDeleted = 0
+        GROUP BY stops.station
+        ORDER BY delayed_stops DESC
+        LIMIT 8`,
+      [end, days - 1, end]
+    );
+
+    const [[dowRows], [branchDisruptRows]] = await Promise.all([
+      pool.query(
+        `SELECT DAYOFWEEK(t.date) AS dow,
+                COUNT(*) AS total,
+                SUM(td.canceled) AS canceled,
+                SUM(td.isDelayed = 1 AND td.canceled = 0 AND td.delayMinutes > 2) AS n_delayed
+           FROM trains t
+           JOIN train_details td USING (trainNumber, date)
+          WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+            AND t.detailStatus = 'ok'
+          GROUP BY dow ORDER BY dow`,
+        [end, days - 1, end]
+      ),
+      pool.query(
+        `SELECT ${BRANCH_CASE} AS branche,
+                COUNT(*) AS total,
+                SUM(td.canceled) AS canceled,
+                SUM(td.isDelayed = 1 AND td.canceled = 0 AND td.delayMinutes > 2) AS n_delayed
+           FROM trains t
+           JOIN train_details td USING (trainNumber, date)
+          WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+            AND t.detailStatus = 'ok' AND ${KNOWN_MISSIONS}
+          GROUP BY branche`,
+        [end, days - 1, end]
+      ),
+    ]);
+
+    res.set("Cache-Control", cacheFor(end));
+    res.json({
+      evolution: evoRows.map((r) => ({
+        date:      r.date,
+        total:     Number(r.total)      || 0,
+        canceled:  Number(r.canceled)   || 0,
+        delayed:   Number(r.n_delayed)  || 0,
+        modified:  Number(r.n_modified) || 0,
+        avg_delay: r.avg_delay != null ? Number(r.avg_delay) : null,
+      })),
+      distribution: {
+        d3_5:    Number(distrib.d3_5)    || 0,
+        d6_10:   Number(distrib.d6_10)   || 0,
+        d11_20:  Number(distrib.d11_20)  || 0,
+        d20plus: Number(distrib.d20plus) || 0,
+      },
+      stations: stationRows.map((r) => ({
+        station:       r.station,
+        delayed_stops: Number(r.delayed_stops),
+      })),
+      byWeekday: dowRows.map((r) => ({
+        dow:     r.dow,
+        total:   Number(r.total)     || 0,
+        canceled: Number(r.canceled) || 0,
+        delayed: Number(r.n_delayed) || 0,
+      })),
+      byBranch: branchDisruptRows.map((r) => ({
+        branch:  r.branche,
+        label:   BRANCHES[r.branche]?.label || r.branche,
+        total:   Number(r.total)     || 0,
+        canceled: Number(r.canceled) || 0,
+        delayed: Number(r.n_delayed) || 0,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
 function cacheFor(date) {
-  return date < today() ? "public, max-age=86400" : "public, max-age=60";
+  const ageDays = (Date.now() - new Date(date + "T12:00:00").getTime()) / 86_400_000;
+  if (ageDays < 1)  return "public, max-age=60";       // aujourd'hui : 1 min
+  if (ageDays < 3)  return "public, max-age=300";      // 48h : 5 min (collecte en cours)
+  if (ageDays < 8)  return "public, max-age=3600";     // semaine : 1h
+  return "public, max-age=86400";                      // plus ancien : 24h
 }
 
 module.exports = router;

@@ -9,7 +9,7 @@ import { MAT_COLOR } from "../palette.js";
 const props = defineProps({ hourly: Array });
 const { palette } = useTheme();
 
-const MAT_FROM_DB = { "RER NG": "RERNG", "NAT": "NAT", "MI2N": "MI2N", "Francilien": "NAT" };
+const MAT_FROM_DB = { "RERNG": "RERNG", "NAT": "NAT", "MI2N": "MI2N" };
 
 function slotToLabel(s) {
   const h = Math.floor(s * 15 / 60);

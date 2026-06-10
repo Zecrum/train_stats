@@ -13,6 +13,9 @@ body { background: #0d1117; }
   --c-mi2n: #f5b545;
   --c-um: #a877ff;
   --c-us: #3a4658;
+  --c-canceled: #ff5c7a;
+  --c-delayed: #ffa94d;
+  --c-modified: #4ecdc4;
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   min-height: 100vh;
   background: var(--bg);
@@ -52,6 +55,9 @@ body { background: #0d1117; }
   --c-mi2n: #cf8418;
   --c-um: #7a4fd6;
   --c-us: #c3ccd8;
+  --c-canceled: #d63031;
+  --c-delayed: #d9730d;
+  --c-modified: #00827f;
   --shadow: 0 1px 2px rgba(20,30,50,0.05);
 }
 .db-app * { box-sizing: border-box; }
