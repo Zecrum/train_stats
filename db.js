@@ -194,11 +194,18 @@ async function saveDetail(trainNumber, date, detail) {
   const courseModified = detail.courseModified  ? 1 : 0;
   const source         = detail.source          || null;
 
-  const delayed = stops.some(s => !s.isDeleted && (s.departureDelayMin != null || s.arrivalDelayMin != null)) ? 1 : 0;
+  // isDelayed = au moins un arrêt avec un retard strictement positif
+  const delayed = stops.some(s => !s.isDeleted && ((s.departureDelayMin ?? 0) > 0 || (s.arrivalDelayMin ?? 0) > 0)) ? 1 : 0;
 
+  // delayMinutes = retard à l'arrivée au terminus (dernière gare active)
+  // Négatif (avance) → ramené à 0
   let delayMinutes = 0;
-  const firstDelayed = stops.find(s => !s.isDeleted && s.departureDelayMin != null);
-  if (firstDelayed) delayMinutes = firstDelayed.departureDelayMin;
+  const activeStops = stops.filter(s => !s.isDeleted);
+  const terminus = activeStops[activeStops.length - 1];
+  if (terminus) {
+    const terminalDelay = terminus.arrivalDelayMin ?? terminus.departureDelayMin ?? 0;
+    delayMinutes = Math.max(0, terminalDelay);
+  }
 
   await pool.execute(
     `INSERT INTO train_details (trainNumber, date, canceled, isDelayed, delayMinutes, courseModified, source, fetchedAt)

@@ -1,6 +1,6 @@
 # RER E Stats — Collecte de la composition des trains
 
-Système automatisé de collecte et d'enregistrement de la composition et des perturbations des trains du RER E, à partir de l'API Transilien et de l'API SNCF Connect.
+Système automatisé de collecte et d'enregistrement de la composition et des perturbations des trains du RER E, à partir de l'API Transilien, de l'API SNCF Voyageurs et de l'API SNCF Connect.
 
 ---
 
@@ -30,7 +30,7 @@ Le RER E circule avec différents types de matériel roulant (RER NG, MI2N, Fran
 │  ┌─────────────┐            ▼                                  │
 │  │  Cron 1min  │───▶ ┌─────────────────────────────────────┐   │
 │  │  (scheduler)│     │  Queue equipment  Queue detail       │   │
-│  └─────────────┘     │  (Transilien)     (SNCF Connect)    │   │
+│  └─────────────┘     │  (Transilien)  (SNCF Voyageurs/SC)  │   │
 │                      └─────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -68,7 +68,7 @@ Chaque appel est filtré par **code mission** pour éviter tout doublon :
 
 ### Phase 2 — Collecte de la composition (Transilien)
 
-Un cron tourne **toutes les minutes** et interroge les trains avec `equipmentStatus = 'pending'` dont le départ est passé depuis **5 min**. Pour chaque train, un appel est effectué sur `/api/transilien/equipment/:number/:date`.
+Un cron tourne **toutes les minutes** et interroge les trains avec `equipmentStatus = 'pending'` dont le départ est passé depuis **5 min**. Pour chaque train, un appel est effectué sur `/api/transilien/equipment/:number/:date`. La queue equipment et la queue detail tournent **en parallèle** dans chaque cycle.
 
 **Stratégie de retry equipment :**
 
@@ -93,7 +93,7 @@ Un cron tourne **toutes les minutes** et interroge les trains avec `equipmentSta
 
 ### Phase 3 — Collecte des perturbations (SNCF Voyageurs / SNCF Connect)
 
-Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée est passée depuis **1 heure**. Un appel est effectué sur `/api/train/:number/:date` (route unifiée) — **SNCF Voyageurs en priorité** (source publique, sans anti-bot), SNCF Connect en fallback.
+Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée est passée depuis **1 heure**. Un appel est effectué sur `/api/train/:number/:date` (route unifiée) — **SNCF Voyageurs en priorité** (source publique, sans anti-bot), SNCF Connect en fallback. Jusqu'à **10 trains par cycle**, espacés de **10 secondes**.
 
 **Détection de l'arrivée :**
 - Train **supprimé** (`deleted: true`) → considéré terminé
@@ -146,7 +146,7 @@ Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée 
 | `date` | DATE PK | |
 | `canceled` | TINYINT(1) | Train supprimé (`deleted`) |
 | `isDelayed` | TINYINT(1) | Au moins un arrêt en retard |
-| `delayMinutes` | SMALLINT | Retard au premier arrêt concerné (minutes) |
+| `delayMinutes` | SMALLINT | Retard à l'arrivée au terminus en minutes (0 si à l'heure ou en avance) |
 | `courseModified` | TINYINT(1) | Parcours modifié (arrêts supprimés, nouvelle origine/terminus) |
 | `source` | VARCHAR(20) | `sncf-voyageurs` ou `sncf-connect` |
 | `fetchedAt` | DATETIME | |
@@ -166,16 +166,16 @@ Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée 
 | `segmentType` | VARCHAR(60) | NULL avec SNCF Voyageurs (héritage SNCF Connect) |
 | `isDeleted` | TINYINT(1) | Arrêt supprimé (`stop.isDeleted`) |
 
-### `train_disruptions` — perturbations SNCF Connect (une par ligne)
+### `train_disruptions` — événements globaux SNCF Voyageurs (un par ligne)
 
 | Colonne | Type | Description |
 |---------|------|-------------|
 | `id` | INT AUTO_INCREMENT PK | |
 | `trainNumber` | VARCHAR(20) | |
 | `date` | DATE | |
-| `disruptionType` | VARCHAR(60) | DISRUPTION_DELETED, DISRUPTION_LIMITATION… |
-| `title` | VARCHAR(200) | |
-| `message` | TEXT | |
+| `disruptionType` | VARCHAR(60) | Catégorie (`deleted`, `course_modified`, `works`…) |
+| `title` | VARCHAR(200) | Titre de l'événement (`deletion.total`, `delay_departure`…) |
+| `message` | TEXT | Texte détaillé de l'événement |
 
 ---
 
@@ -187,7 +187,7 @@ transilien_stats/
 ├── .env.example        # Template à commiter
 ├── config.js           # Paramètres (lit le .env)
 ├── db.js               # Connexion MySQL, création des tables, requêtes
-├── collector.js        # Appels HTTP (Transilien + SNCF Connect)
+├── collector.js        # Appels HTTP (Transilien + SNCF Voyageurs/Connect)
 ├── scheduler.js        # Cron 1 min — queues equipment et detail
 ├── timetable.js        # Collecte timetable avec retry
 ├── logger.js           # Logger console + fichier (heure de Paris)
@@ -261,10 +261,13 @@ Un fichier par jour dans `logs/YYYY-MM-DD.log`, en heure de Paris.
 
 ```
 [2026-06-04 04:30:00] [INFO ] TIMETABLE | Collecte du 2026-06-04
+[2026-06-04 04:30:00] [INFO ] TIMETABLE | Collecte du 2026-06-04
 [2026-06-04 10:15:01] [OK   ] EQUIP OK        | 119002 | 2026-06-04 | RER NG (6C) + RER NG (6C)
 [2026-06-04 10:15:11] [WARN ] EQUIP VIDE      | 118108 | 2026-06-04
 [2026-06-04 11:20:00] [OK   ] DETAIL OK       | 119002 | 2026-06-04 | retard
-[2026-06-04 11:20:00] [WARN ] DETAIL EN ROUTE | 118200 | 2026-06-04 | pas encore arrivé — retry dans 60 min
+[2026-06-04 11:20:00] [OK   ] DETAIL OK       | 118200 | 2026-06-04 | supprimé
+[2026-06-04 11:20:00] [OK   ] DETAIL OK       | 118133 | 2026-06-04 | parcours modifié | arrêt(s) supprimé(s)
+[2026-06-04 11:20:00] [WARN ] DETAIL EN ROUTE | 118300 | 2026-06-04 | pas encore arrivé — retry dans 60 min
 [2026-06-04 11:20:00] [WARN ] DETAIL 404      | 116050 | 2026-06-04 | marqué unknown
 ```
 

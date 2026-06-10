@@ -27,6 +27,6 @@ module.exports = {
     retryDelays: [10, 10],
     equipmentCallSpacing: 10000,
     detailPerCycle:       3,
-    timetableCallSpacing: 5 * 60 * 1000,
+    timetableCallSpacing: 2 * 60 * 1000,
   },
 };
