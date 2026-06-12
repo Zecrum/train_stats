@@ -10,8 +10,9 @@ async function tryFetchEntry(entry, date) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const trains = await fetchTimetable(entry, date);
-      for (const train of trains) await insertTrain(train);
-      return trains.length;
+      let inserted = 0;
+      for (const train of trains) inserted += await insertTrain(train);
+      return inserted;
     } catch (err) {
       const status = err.response?.status;
       if (attempt < 2) {

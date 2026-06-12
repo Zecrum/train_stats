@@ -161,7 +161,7 @@ async function processDetailQueue() {
       lastDetailAt = Date.now();
       await handleDetailError(train, err);
     }
-    await sleep(config.scheduler.equipmentCallSpacing);
+    await sleep(config.scheduler.detailCallSpacing);
   }
 }
 

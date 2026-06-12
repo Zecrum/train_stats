@@ -128,7 +128,7 @@ async function initDb() {
 }
 
 async function insertTrain(train) {
-  await pool.execute(
+  const [result] = await pool.execute(
     `INSERT IGNORE INTO trains
        (trainNumber, date, mission, departureStation, departureTime, arrivalStation, arrivalTime)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -136,6 +136,7 @@ async function insertTrain(train) {
      train.departureStation, train.departureTime,
      train.arrivalStation, train.arrivalTime]
   );
+  return result.affectedRows;
 }
 
 async function getPendingEquipmentTrains() {

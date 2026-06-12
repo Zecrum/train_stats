@@ -15,12 +15,12 @@ async function fetchTimetable(entry, date) {
     .filter(t => entry.missions.includes(t.mission))
     .map(t => ({
       trainNumber:      t.trainNumber,
-      date:             t.departureTime.substring(0, 10),
+      date,
       mission:          t.mission,
       departureStation: t.departureStation,
-      departureTime:    t.departureTime,
+      departureTime:    t.departureTime.replace(/^\d{4}-\d{2}-\d{2}/, date),
       arrivalStation:   t.arrivalStation,
-      arrivalTime:      t.arrivalTime,
+      arrivalTime:      t.arrivalTime.replace(/^\d{4}-\d{2}-\d{2}/, date),
     }));
 }
 
