@@ -5,12 +5,21 @@ const pool = require("../db");
 const router = express.Router();
 
 // Source unique pour les branches — BRANCH_CASE, KNOWN_MISSIONS, BRANCH_MISSIONS et BRANCHES en sont dérivés.
+// outbound = missions partant de Paris (Haussmann) vers le terminus de branche.
 const BRANCH_DEF = [
-  { key: "Chelles",  label: "Chelles–Gournay",    missions: ["NOCY","CONY"] },
-  { key: "Tournan",  label: "Tournan",            missions: ["NATU","NUTU","TANU","TINU"] },
-  { key: "Villiers", label: "Villiers-sur-Marne", missions: ["NOVY","VONY"] },
-  { key: "Central",  label: "Tronçon central",    missions: ["NOMY","MONY"] },
+  { key: "Chelles",  label: "Chelles–Gournay",    short: "Chelles",  outbound: ["NOCY"],        missions: ["NOCY","CONY"]               },
+  { key: "Tournan",  label: "Tournan",             short: "Tournan",  outbound: ["NATU","NUTU"], missions: ["NATU","NUTU","TANU","TINU"]  },
+  { key: "Villiers", label: "Villiers-sur-Marne",  short: "Villiers", outbound: ["NOVY"],        missions: ["NOVY","VONY"]               },
+  { key: "Central",  label: "Tronçon central",     short: "Central",  outbound: ["NOMY"],        missions: ["NOMY","MONY"]               },
 ];
+// Table mission → { direction: 'outbound'|'inbound', branchShort }
+const MISSION_DIR = {};
+for (const b of BRANCH_DEF) {
+  const out = new Set(b.outbound);
+  for (const m of b.missions) {
+    MISSION_DIR[m] = { direction: out.has(m) ? "outbound" : "inbound", branchShort: b.short };
+  }
+}
 function mIn(ms) { return `mission IN (${ms.map(m => `'${m}'`).join(",")})`; }
 const BRANCHES        = Object.fromEntries(BRANCH_DEF.map(b => [b.key, { label: b.label, missions: b.missions.join(" · ") }]));
 const BRANCH_CASE     = `CASE ${BRANCH_DEF.map(b => `WHEN ${mIn(b.missions)} THEN '${b.key}'`).join(" ")} END`;
@@ -406,6 +415,132 @@ router.get("/disruptions", async (req, res, next) => {
         total:   Number(r.total)     || 0,
         canceled: Number(r.canceled) || 0,
         delayed: Number(r.n_delayed) || 0,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
+/* -------------------------------------------------------------------------- */
+/* GET /api/stats/trains-day?date=YYYY-MM-DD                                  */
+/* -------------------------------------------------------------------------- */
+router.get("/trains-day", async (req, res, next) => {
+  try {
+    const date = parseDate(req.query.date);
+    const [rows] = await pool.query(
+      `SELECT t.trainNumber,
+              t.mission,
+              ${BRANCH_CASE}                        AS branche,
+              TIME_FORMAT(t.departureTime, '%H:%i') AS departureTime,
+              TIME_FORMAT(t.arrivalTime,   '%H:%i') AS arrivalTime,
+              LOWER(t.formation)                    AS formation,
+              ts.rollingStock                       AS material,
+              IFNULL(td.canceled, 0)                AS canceled,
+              IFNULL(td.courseModified, 0)          AS modified,
+              CASE WHEN td.isDelayed = 1 AND IFNULL(td.canceled, 0) = 0
+                   THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                   ELSE NULL END                    AS delayMinutes
+         FROM trains t
+         JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
+         LEFT JOIN (
+           SELECT trainNumber, date,
+                  MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                           THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                           ELSE NULL END) AS max_delay
+             FROM train_stops
+            WHERE realTime IS NOT NULL AND isDelayed = 1
+            GROUP BY trainNumber, date
+         ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+        WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ${KNOWN_MISSIONS}
+        ORDER BY t.departureTime`,
+      [date]
+    );
+    res.set("Cache-Control", cacheFor(date));
+    res.json(rows.map((r) => {
+      const mdir = MISSION_DIR[r.mission] || {};
+      return {
+        trainNumber:   r.trainNumber,
+        mission:       r.mission,
+        branch:        r.branche,
+        direction:     mdir.direction   || null,
+        branchShort:   mdir.branchShort || null,
+        departureTime: r.departureTime,
+        arrivalTime:   r.arrivalTime,
+        formation:     r.formation || "us",
+        material:      r.material,
+        canceled:      !!r.canceled,
+        modified:      !!r.modified,
+        delayMinutes:  r.delayMinutes != null ? Number(r.delayMinutes) : null,
+      };
+    }));
+  } catch (e) { next(e); }
+});
+
+/* -------------------------------------------------------------------------- */
+/* GET /api/stats/train-detail?trainNumber=&date=YYYY-MM-DD                   */
+/* -------------------------------------------------------------------------- */
+router.get("/train-detail", async (req, res, next) => {
+  try {
+    const date        = parseDate(req.query.date);
+    const trainNumber = (req.query.trainNumber || "").trim();
+    if (!trainNumber) return res.status(400).json({ error: "trainNumber requis" });
+
+    const [[metaRows], [stops]] = await Promise.all([
+      pool.query(
+        `SELECT t.trainNumber, t.mission, LOWER(t.formation) AS formation,
+                ts.rollingStock AS material,
+                IFNULL(td.canceled, 0)       AS canceled,
+                IFNULL(td.courseModified, 0) AS modified,
+                td.isDelayed,
+                COALESCE(NULLIF(GREATEST(IFNULL(td.delayMinutes, 0), 0), 0), sd.max_delay) AS delayMinutes
+           FROM trains t
+           JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+           LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
+           LEFT JOIN (
+             SELECT trainNumber, date,
+                    MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                             THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                             ELSE NULL END) AS max_delay
+               FROM train_stops WHERE isDelayed = 1 GROUP BY trainNumber, date
+           ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+          WHERE t.trainNumber = ? AND t.date = ?`,
+        [trainNumber, date]
+      ),
+      pool.query(
+        `SELECT position, station,
+                TIME_FORMAT(scheduledTime, '%H:%i') AS scheduledTime,
+                TIME_FORMAT(realTime,      '%H:%i') AS realTime,
+                isDelayed, isDeleted
+           FROM train_stops
+          WHERE trainNumber = ? AND date = ?
+          ORDER BY position`,
+        [trainNumber, date]
+      ),
+    ]);
+
+    const meta = metaRows[0];
+    if (!meta) return res.status(404).json({ error: "Train introuvable" });
+
+    const mdir = MISSION_DIR[meta.mission] || {};
+    res.set("Cache-Control", cacheFor(date));
+    res.json({
+      trainNumber: meta.trainNumber,
+      mission:     meta.mission,
+      formation:   meta.formation || "us",
+      material:    meta.material,
+      direction:   mdir.direction   || null,
+      branchShort: mdir.branchShort || null,
+      canceled:    !!meta.canceled,
+      modified:    !!meta.modified,
+      delayMinutes: meta.isDelayed && !meta.canceled && meta.delayMinutes
+        ? Number(meta.delayMinutes) : null,
+      stops: stops.map((s) => ({
+        position:      Number(s.position),
+        station:       s.station,
+        scheduledTime: s.scheduledTime,
+        realTime:      s.realTime || null,
+        isDelayed:     !!s.isDelayed,
+        isDeleted:     !!s.isDeleted,
       })),
     });
   } catch (e) { next(e); }

@@ -16,6 +16,8 @@ body { background: #0d1117; }
   --c-canceled: #ff5c7a;
   --c-delayed: #ffa94d;
   --c-modified: #4ecdc4;
+  --border: var(--line);
+  --fg: var(--text);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   min-height: 100vh;
   background: var(--bg);

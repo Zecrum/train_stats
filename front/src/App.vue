@@ -12,6 +12,7 @@ import BranchGrid from "./components/BranchGrid.vue";
 import HourlyChart from "./components/HourlyChart.vue"
 import HourlyDisruptionChart from "./components/HourlyDisruptionChart.vue";
 import HourlyTotalDelayChart from "./components/HourlyTotalDelayChart.vue";
+import TrainList from "./components/TrainList.vue";
 import EvolutionChart from "./components/EvolutionChart.vue";
 import DisruptionBar from "./components/DisruptionBar.vue";
 import DisruptionChart from "./components/DisruptionChart.vue";
@@ -20,6 +21,7 @@ const { theme, toggle } = useTheme();
 
 const TABS = [
   { id: "jour",          label: "Jour J" },
+  { id: "trains",        label: "Trains" },
   { id: "horaire",       label: "Répartition horaire" },
   { id: "evolution",     label: "Évolution" },
   { id: "perturbations", label: "Perturbations" },
@@ -39,6 +41,7 @@ const BRANCH_KEYS = ["Chelles", "Tournan", "Villiers", "Central"];
 const daily = ref(null);
 const hourly = ref(null);
 const hourlyDisruptions = ref(null);
+const trainsDay = ref(null);
 const evolution = ref(null);
 const disruptions = ref(null);
 const branchFilter = ref(null);
@@ -53,10 +56,16 @@ async function loadDay() {
   startLoad();
   try {
     error.value = "";
-    const [d, h, hd] = await Promise.all([api.daily(date.value), api.hourly(date.value, branchFilter.value), api.hourlyDisruptions(date.value)]);
-    hourlyDisruptions.value = hd;
+    const [d, h, hd, td] = await Promise.all([
+      api.daily(date.value),
+      api.hourly(date.value, branchFilter.value),
+      api.hourlyDisruptions(date.value),
+      api.trainsDay(date.value),
+    ]);
     daily.value = d;
     hourly.value = h;
+    hourlyDisruptions.value = hd;
+    trainsDay.value = td;
   } catch (e) { error.value = e.message; }
   finally { endLoad(); }
 }
@@ -216,6 +225,15 @@ const evoStats = computed(() => {
         <BranchGrid :branches="daily.branches" />
       </template>
 
+      <!-- ===== Vue Trains ===== -->
+      <template v-else-if="view === 'trains' && trainsDay">
+        <section class="db-panel">
+          <div class="db-panel-h">// trains du jour · par branche · heure de départ</div>
+          <TrainList :trains="trainsDay" :date="date" />
+          <div class="db-foot-note">/api/stats/trains-day · trains avec équipement résolu · source SNCF Connect pour perturbations</div>
+        </section>
+      </template>
+
       <!-- ===== Vue Répartition horaire ===== -->
       <template v-else-if="view === 'horaire' && daily && hourly">
         <section class="db-panel db-metrics" v-if="peakStats">
@@ -345,10 +363,10 @@ const evoStats = computed(() => {
             <div class="db-panel-h">// ponctualité par jour de semaine</div>
             <div v-if="byWeekday.length" class="db-breakdown">
               <div class="db-bk-row" v-for="r in byWeekday" :key="r.label">
-                <span class="db-bk-label">{{ r.label }}</span>
-                <div class="db-bk-bar"><div class="db-bk-fill" :style="{ width: r.barW + '%' }"></div></div>
-                <span class="db-bk-val">{{ r.pctDelayed }}%</span>
-                <span class="db-bk-val2">{{ r.pctCanceled }}% sup.</span>
+                <span class="db-bk-label" :title="r.label">{{ r.label }}</span>
+                <div class="db-bk-bar" title="proportionnel au taux de retard"><div class="db-bk-fill" :style="{ width: r.barW + '%' }"></div></div>
+                <span class="db-bk-val" title="en retard ≥ 3 min">{{ r.pctDelayed }}%</span>
+                <span class="db-bk-val2" title="supprimés">{{ r.pctCanceled }}% sup.</span>
               </div>
             </div>
             <p v-else class="db-loading">Aucune donnée</p>
@@ -357,10 +375,10 @@ const evoStats = computed(() => {
             <div class="db-panel-h">// ponctualité par branche</div>
             <div v-if="byBranch.length" class="db-breakdown">
               <div class="db-bk-row" v-for="r in byBranch" :key="r.label">
-                <span class="db-bk-label">{{ r.label }}</span>
-                <div class="db-bk-bar"><div class="db-bk-fill" :style="{ width: r.barW + '%' }"></div></div>
-                <span class="db-bk-val">{{ r.pctDelayed }}%</span>
-                <span class="db-bk-val2">{{ r.pctCanceled }}% sup.</span>
+                <span class="db-bk-label" :title="r.label">{{ r.label }}</span>
+                <div class="db-bk-bar" title="proportionnel au taux de retard"><div class="db-bk-fill" :style="{ width: r.barW + '%' }"></div></div>
+                <span class="db-bk-val" title="en retard ≥ 3 min">{{ r.pctDelayed }}%</span>
+                <span class="db-bk-val2" title="supprimés">{{ r.pctCanceled }}% sup.</span>
               </div>
             </div>
             <p v-else class="db-loading">Aucune donnée</p>
@@ -407,7 +425,7 @@ const evoStats = computed(() => {
 
 .db-breakdown   { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
 .db-bk-row      { display: flex; align-items: center; gap: 8px; }
-.db-bk-label    { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); min-width: 90px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-bk-label    { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); width: 140px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .db-bk-bar      { flex: 1; height: 8px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
 .db-bk-fill     { height: 100%; background: var(--c-delayed); border-radius: 3px; transition: width 0.4s ease; }
 .db-bk-val      { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--faint); min-width: 32px; text-align: right; }
