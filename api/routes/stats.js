@@ -440,7 +440,7 @@ router.get("/trains-day", async (req, res, next) => {
                    THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
                    ELSE NULL END                    AS delayMinutes
          FROM trains t
-         JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+         LEFT JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
          LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
          LEFT JOIN (
            SELECT trainNumber, date,
@@ -451,7 +451,7 @@ router.get("/trains-day", async (req, res, next) => {
             WHERE realTime IS NOT NULL AND isDelayed = 1
             GROUP BY trainNumber, date
          ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
-        WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ${KNOWN_MISSIONS}
+        WHERE t.date = ? AND ${KNOWN_MISSIONS}
         ORDER BY t.departureTime`,
       [date]
     );
@@ -494,7 +494,7 @@ router.get("/train-detail", async (req, res, next) => {
                 td.isDelayed,
                 COALESCE(NULLIF(GREATEST(IFNULL(td.delayMinutes, 0), 0), 0), sd.max_delay) AS delayMinutes
            FROM trains t
-           JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+           LEFT JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
            LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
            LEFT JOIN (
              SELECT trainNumber, date,
