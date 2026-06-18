@@ -156,7 +156,7 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 ### `GET /api/health`
 
 ```json
-{ "ok": true }
+{ "ok": true, "version": "1.0.0" }
 ```
 
 ---
@@ -179,6 +179,8 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 
 ```
 train_stats/
+├── VERSION               # Numéro de version — source unique back/front
+├── deploy.sh             # Script de déploiement VPS (pull + install + build)
 ├── api/
 │   ├── index.js          # Point d'entrée Express + CORS
 │   ├── db.js             # Pool MySQL partagé (lecture seule)
@@ -244,3 +246,71 @@ npm run dev
 ```
 
 > En production, builder le front avec `npm run build` et servir `dist/` via Nginx ou Express.
+
+---
+
+## Versioning
+
+Le numéro de version est centralisé dans le fichier `VERSION` à la racine — source unique pour le backend et le frontend.
+
+- **Backend** : exposé dans `GET /api/health` (champ `version`), affiché au démarrage dans les logs
+- **Frontend** : injecté au build (`vite.config.js` lit `VERSION` via `define: { __APP_VERSION__ }`), affiché discrètement en bas de chaque page
+
+### Branches
+
+`main` est la branche de production — tout ce qui y est mergé peut être déployé via `deploy.sh` (`git pull origin main` sur le VPS).
+
+Le développement courant se fait sur `dev` (ou des branches `feature/...`), mergée sur `main` seulement quand le code est stable :
+
+```bash
+git checkout dev
+# ... commits ...
+
+# Quand c'est prêt à déployer
+git checkout main
+git merge dev
+git push origin main
+```
+
+### Workflow de release
+
+Convention [SemVer](https://semver.org/lang/fr/) : `MAJOR.MINOR.PATCH`
+- **MAJOR** — changement cassant (route supprimée/modifiée incompatible)
+- **MINOR** — nouvelle fonctionnalité rétrocompatible
+- **PATCH** — correctif de bug
+
+```bash
+# 1. Mettre à jour le fichier VERSION
+echo "1.1.0" > VERSION
+
+# 2. Committer
+git add VERSION
+git commit -m "Bump version to 1.1.0"
+
+# 3. Tagger et pousser
+git tag v1.1.0
+git push origin main --tags
+```
+
+Le tag `v1.1.0` sert de point de repère sur GitHub — utile pour créer une **Release** (GitHub → Releases → Draft a new release → choisir le tag).
+
+---
+
+## Déploiement (aaPanel)
+
+Le site Node.js est géré via le plugin **Node项目管理器** (Node Project Manager) d'aaPanel.
+
+Le script `deploy.sh` à la racine automatise le pull et le build sur le VPS :
+
+```bash
+./deploy.sh
+```
+
+Il effectue dans l'ordre :
+1. `git pull origin main`
+2. `npm install` dans `api/` (pas de build — Node pur)
+3. `npm install` + `npm run build` dans `front/`
+
+**Le redémarrage du process n'est pas automatisé** — après le script, redémarrer manuellement le site depuis l'interface aaPanel (NodeJS → sélectionner le site → Restart).
+
+`api/.env` doit contenir les valeurs de production (`PORT`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `CORS_ORIGIN`) — voir [Configuration](#configuration).

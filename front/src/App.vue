@@ -19,6 +19,8 @@ import DisruptionChart from "./components/DisruptionChart.vue";
 
 const { theme, toggle } = useTheme();
 
+const appVersion = __APP_VERSION__;
+
 const TABS = [
   { id: "jour",          label: "Jour J" },
   { id: "trains",        label: "Trains" },
@@ -390,6 +392,8 @@ const evoStats = computed(() => {
 
       <p v-else-if="!error && !loading" class="db-loading">Chargement…</p>
       </div>
+
+      <footer class="db-version">v{{ appVersion }}</footer>
     </div>
   </div>
 </template>
@@ -430,6 +434,8 @@ const evoStats = computed(() => {
 .db-bk-fill     { height: 100%; background: var(--c-delayed); border-radius: 3px; transition: width 0.4s ease; }
 .db-bk-val      { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--faint); min-width: 32px; text-align: right; }
 .db-bk-val2     { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--c-canceled); min-width: 54px; text-align: right; }
+
+.db-version { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); text-align: center; margin-top: 24px; opacity: 0.6; }
 
 
 </style>
