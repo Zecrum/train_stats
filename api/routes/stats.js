@@ -54,20 +54,25 @@ router.get("/daily", async (req, res, next) => {
     );
 
     // Matériel : on joint train_sets (position = 1 = rame de tête) pour obtenir rollingStock.
+    // Exclut les trains supprimés (td.canceled) — un train annulé n'a pas réellement circulé.
     const [matRows] = await pool.query(
       `SELECT ts.rollingStock AS materiel, COUNT(*) AS n
          FROM trains t
          JOIN train_sets ts USING (trainNumber, date)
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
         WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ts.position = 1
+          AND IFNULL(td.canceled, 0) = 0
         GROUP BY materiel`,
       [date]
     );
 
     // Couplage : la colonne formation (US/UM) est sur la table trains.
     const [coupRows] = await pool.query(
-      `SELECT LOWER(formation) AS couplage, COUNT(*) AS n
-         FROM trains
-        WHERE date = ? AND equipmentStatus = 'ok'
+      `SELECT LOWER(t.formation) AS couplage, COUNT(*) AS n
+         FROM trains t
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
+        WHERE t.date = ? AND t.equipmentStatus = 'ok'
+          AND IFNULL(td.canceled, 0) = 0
         GROUP BY couplage`,
       [date]
     );
@@ -83,7 +88,9 @@ router.get("/daily", async (req, res, next) => {
               SUM(t.formation = 'UM')        AS n_um
          FROM trains t
          JOIN train_sets ts USING (trainNumber, date)
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
         WHERE t.date = ? AND t.equipmentStatus = 'ok' AND ts.position = 1 AND ${KNOWN_MISSIONS}
+          AND IFNULL(td.canceled, 0) = 0
         GROUP BY 1`,
       [date]
     );
@@ -97,7 +104,8 @@ router.get("/daily", async (req, res, next) => {
                   AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
               SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
               ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
-                             THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                             AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2
+                             THEN COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay)
                         END))                                        AS avg_delay
          FROM trains t
          JOIN train_details td USING (trainNumber, date)
@@ -261,8 +269,10 @@ router.get("/evolution", async (req, res, next) => {
               COUNT(*) AS total
          FROM trains t
          JOIN train_sets ts ON ts.trainNumber = t.trainNumber AND ts.date = t.date AND ts.position = 1
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
         WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
           AND t.equipmentStatus = 'ok'
+          AND IFNULL(td.canceled, 0) = 0
         GROUP BY t.date
         ORDER BY t.date`,
       [end, days - 1, end]
@@ -294,7 +304,8 @@ router.get("/disruptions", async (req, res, next) => {
                   AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
               SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
               ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
-                             THEN NULLIF(COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay), 0)
+                             AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2
+                             THEN COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay)
                         END))                                        AS avg_delay
          FROM trains t
          JOIN train_details td USING (trainNumber, date)

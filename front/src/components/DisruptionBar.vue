@@ -8,7 +8,7 @@ const props = defineProps({ disruptions: Object });
   <section class="db-panel db-metrics db-disrupt-bar" v-if="disruptions?.detail_total > 0">
     <div>
       <div class="db-stat-v">{{ disruptions.detail_total }}</div>
-      <div class="db-stat-l">trajets analysés (SNCF Connect)</div>
+      <div class="db-stat-l">trajets analysés</div>
     </div>
     <div class="db-divider"></div>
     <div>

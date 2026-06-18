@@ -5,7 +5,6 @@ import { TODAY, fmtLong, pct } from "./utils.js";
 import { useTheme } from "./composables/useTheme.js";
 
 import DatePicker from "./components/DatePicker.vue";
-import MetricsBar from "./components/MetricsBar.vue";
 import MaterialDonut from "./components/MaterialDonut.vue";
 import CouplingCard from "./components/CouplingCard.vue";
 import BranchGrid from "./components/BranchGrid.vue";
@@ -218,7 +217,6 @@ const evoStats = computed(() => {
 
       <!-- ===== Vue Jour J ===== -->
       <template v-if="view === 'jour' && daily">
-        <MetricsBar :daily="daily" />
         <DisruptionBar v-if="daily.disruptions?.detail_total" :disruptions="daily.disruptions" />
         <section class="db-row2">
           <MaterialDonut :material="daily.material" />
