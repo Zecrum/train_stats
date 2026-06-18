@@ -1,6 +1,6 @@
 # Transilien Stats
 
-Interface web de visualisation des statistiques de composition du matériel roulant du RER E, alimentée par une API REST Node.js connectée à la base MySQL du collecteur Transilien.
+Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques de composition du matériel roulant.
 
 ---
 
@@ -169,9 +169,10 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 | Graphiques | Chart.js via vue-chartjs |
 | HTTP client (front) | `fetch` natif |
 | API REST | Node.js + Express |
-| Base de données | MySQL (lecture seule) |
+| Base de données | MySQL (lecture seule côté API) |
 | Driver MySQL | mysql2/promise |
 | Build tool | Vite |
+| Collecteur | Node.js + node-cron + axios |
 
 ---
 
@@ -179,8 +180,17 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 
 ```
 train_stats/
-├── VERSION               # Numéro de version — source unique back/front
+├── VERSION               # Numéro de version — source unique collecteur/api/front
 ├── deploy.sh             # Script de déploiement VPS (pull + install + build)
+├── collector/
+│   ├── index.js          # Point d'entrée — démarre le scheduler + cron timetable 3h30
+│   ├── collector.js       # Collecte de la composition d'un train (Transilien)
+│   ├── timetable.js       # Récupération des sillons théoriques du jour
+│   ├── scheduler.js       # Boucle 1 min — déclenche equipment/detail par train
+│   ├── db.js              # Pool MySQL (écriture)
+│   ├── config.js          # Config branches/missions
+│   ├── logger.js          # Logs fichier + console
+│   └── .env               # Variables d'environnement (écriture)
 ├── api/
 │   ├── index.js          # Point d'entrée Express + CORS
 │   ├── db.js             # Pool MySQL partagé (lecture seule)
@@ -217,6 +227,16 @@ train_stats/
 ## Configuration
 
 ```env
+# collector/.env
+API_BASE_URL=http://localhost:3000
+API_KEY=
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=rer_e_stats
+```
+
+```env
 # api/.env
 DB_HOST=localhost
 DB_USER=root
@@ -226,7 +246,7 @@ PORT=3051
 CORS_ORIGIN=http://localhost:5173
 ```
 
-> L'API est en **lecture seule** — aucune écriture depuis le dashboard.  
+> L'API REST est en **lecture seule** — aucune écriture depuis le dashboard. Seul le collecteur écrit en base.  
 > CORS fail-closed : sans `CORS_ORIGIN`, toute requête cross-origin est refusée.
 
 ---
@@ -234,6 +254,11 @@ CORS_ORIGIN=http://localhost:5173
 ## Lancement
 
 ```bash
+# Collecteur (process long — cron interne)
+cd collector
+npm install
+node index.js
+
 # API
 cd api
 npm install
@@ -245,7 +270,8 @@ npm install
 npm run dev
 ```
 
-> En production, builder le front avec `npm run build` et servir `dist/` via Nginx ou Express.
+> Le collecteur et l'API sont des process long-running — en production, les superviser avec PM2 ou un service systemd pour qu'ils redémarrent automatiquement en cas de crash.  
+> Builder le front avec `npm run build` et servir `dist/` via Nginx ou Express.
 
 ---
 
@@ -308,9 +334,9 @@ Le script `deploy.sh` à la racine automatise le pull et le build sur le VPS :
 
 Il effectue dans l'ordre :
 1. `git pull origin main`
-2. `npm install` dans `api/` (pas de build — Node pur)
+2. `npm install` dans `collector/`, `api/` (pas de build — Node pur)
 3. `npm install` + `npm run build` dans `front/`
 
-**Le redémarrage du process n'est pas automatisé** — après le script, redémarrer manuellement le site depuis l'interface aaPanel (NodeJS → sélectionner le site → Restart).
+**Le redémarrage des process n'est pas automatisé** — après le script, redémarrer manuellement le collecteur et l'API depuis l'interface aaPanel (NodeJS → sélectionner le site → Restart).
 
-`api/.env` doit contenir les valeurs de production (`PORT`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `CORS_ORIGIN`) — voir [Configuration](#configuration).
+`collector/.env` et `api/.env` doivent contenir les valeurs de production — voir [Configuration](#configuration).
