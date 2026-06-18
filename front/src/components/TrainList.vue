@@ -192,8 +192,8 @@ const byBranch = computed(() => {
   letter-spacing: 0.03em;
 }
 .tl-mat.is-rerng   { background: var(--c-rerng); color: #fff; }
-.tl-mat.is-nat     { background: #7c4dbd;        color: #fff; }
-.tl-mat.is-mi2n    { background: #e8890c;        color: #fff; }
+.tl-mat.is-nat     { background: var(--c-nat);   color: #fff; }
+.tl-mat.is-mi2n    { background: var(--c-mi2n);  color: #fff; }
 .tl-mat.is-unknown { color: var(--faint); }
 
 .tl-form-badge {
