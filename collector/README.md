@@ -104,6 +104,27 @@ Le même cron traite les trains avec `detailStatus = 'pending'` dont l'arrivée 
 
 ---
 
+### Phase 4 — Retry des échecs définitifs (2h30)
+
+Un cron se déclenche à **2h30 chaque matin** et retente une dernière fois, pour la veille (`yesterdayParis()`), tous les trains marqués `equipmentStatus = 'unknown'` ou `detailStatus = 'unknown'` — c'est-à-dire ceux qui ont épuisé leurs tentatives pendant la journée et que le scheduler ne retraite plus.
+
+Réutilise directement `fetchEquipment` / `fetchTrainDetail` / `saveEquipment` / `saveDetail` (mêmes fonctions que le scheduler), avec les mêmes espacements d'appel (`config.scheduler.equipmentCallSpacing` / `detailCallSpacing`). En cas de succès, le statut passe à `ok` ; en cas de nouvel échec, le train reste `unknown` (pas de compteur de tentatives supplémentaire — c'est une dernière chance, pas une nouvelle queue).
+
+Déclenchement manuel pour tester ou rattraper une date précise :
+
+```bash
+node retry-now.js              # rattrape hier
+node retry-now.js 2026-06-15   # rattrape une date précise
+```
+
+Pour rattraper **tout l'historique** (toutes les dates ayant encore des trains `unknown`, pas seulement la veille) :
+
+```bash
+node retry-all-now.js
+```
+
+---
+
 ## Structure de la base de données
 
 ### `trains` — horaires + statuts de collecte
@@ -190,10 +211,13 @@ transilien_stats/
 ├── collector.js        # Appels HTTP (Transilien + SNCF Voyageurs/Connect)
 ├── scheduler.js        # Cron 1 min — queues equipment et detail
 ├── timetable.js        # Collecte timetable avec retry
+├── retry.js            # Dernière chance pour les trains marqués 'unknown'
 ├── logger.js           # Logger console + fichier (heure de Paris)
-├── utils.js            # Utilitaires timezone (nowParis, todayParis)
+├── utils.js            # Utilitaires timezone (nowParis, todayParis, yesterdayParis)
 ├── collect-now.js      # Collecte timetable manuelle
-├── index.js            # Point d'entrée + cron 4h30
+├── retry-now.js        # Retry manuel des échecs (veille ou date précise)
+├── retry-all-now.js    # Retry manuel sur tout l'historique 'unknown'
+├── index.js            # Point d'entrée + cron 2h30 / 3h30
 ├── logs/               # Logs journaliers YYYY-MM-DD.log (ignoré par git)
 └── package.json
 ```

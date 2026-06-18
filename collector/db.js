@@ -163,6 +163,33 @@ async function getPendingDetailTrains() {
   return rows;
 }
 
+async function getDatesWithUnknownStatus() {
+  const [rows] = await pool.execute(`
+    SELECT DISTINCT date FROM trains
+    WHERE equipmentStatus = 'unknown' OR detailStatus = 'unknown'
+    ORDER BY date ASC
+  `);
+  return rows.map(r => r.date);
+}
+
+async function getUnknownEquipmentTrains(date) {
+  const [rows] = await pool.execute(`
+    SELECT * FROM trains
+    WHERE date = ? AND equipmentStatus = 'unknown'
+    ORDER BY departureTime ASC
+  `, [date]);
+  return rows;
+}
+
+async function getUnknownDetailTrains(date) {
+  const [rows] = await pool.execute(`
+    SELECT * FROM trains
+    WHERE date = ? AND detailStatus = 'unknown'
+    ORDER BY departureTime ASC
+  `, [date]);
+  return rows;
+}
+
 async function saveEquipment(trainNumber, date, sets) {
   const formation = sets.length >= 2 ? 'UM' : 'US';
 
@@ -281,6 +308,7 @@ async function markDetailUnknown(trainNumber, date, retries) {
 module.exports = {
   initDb, insertTrain,
   getPendingEquipmentTrains, getPendingDetailTrains,
+  getDatesWithUnknownStatus, getUnknownEquipmentTrains, getUnknownDetailTrains,
   saveEquipment, saveDetail,
   scheduleEquipmentRetry, markEquipmentUnknown,
   scheduleDetailRetry, markDetailUnknown,
