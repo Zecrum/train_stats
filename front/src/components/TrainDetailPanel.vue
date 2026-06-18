@@ -60,7 +60,7 @@ function delayMin(sched, real) {
             <span class="tdp-mat-badge is-nat"   v-else-if="detail.material === 'NAT'">NAT</span>
             <span class="tdp-mat-badge is-mi2n"  v-else-if="detail.material === 'MI2N'">MI2N</span>
             <span class="tdp-form-badge is-um" v-if="detail.formation === 'um'">UM</span>
-            <span class="tdp-form-badge is-us" v-else>US</span>
+            <span class="tdp-form-badge is-us" v-else-if="detail.formation === 'us'">US</span>
           </template>
           <button class="tdp-close" @click="emit('close')">✕</button>
         </div>
@@ -309,6 +309,10 @@ function delayMin(sched, real) {
   font-size: 12px;
   color: var(--dim);
 }
+.tdp-stop.is-terminus .tdp-times .tdp-time:not(.is-old) {
+  color: var(--fg);
+  font-weight: 600;
+}
 .tdp-time.is-old {
   font-size: 10px;
   color: var(--faint);
@@ -332,4 +336,30 @@ function delayMin(sched, real) {
 }
 .tdp-pill.is-late { background: var(--c-delayed);  color: #fff; }
 .tdp-pill.is-del  { background: var(--c-canceled); color: #fff; }
+
+@media (max-width: 600px) {
+  .tdp-panel {
+    width: 100vw;
+    height: 92dvh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    animation: tdp-in-mobile 0.22s ease;
+  }
+  @keyframes tdp-in-mobile {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .tdp-backdrop { align-items: flex-end; justify-content: center; }
+
+  .tdp-header { padding: 12px 14px; }
+  .tdp-mission { font-size: 18px; }
+
+  .tdp-stop { grid-template-columns: 30px 1fr 100px; }
+  .tdp-times { padding: 6px 10px 6px 6px; }
+  .tdp-sname { font-size: 11px; padding: 8px 8px 8px 2px; }
+}
 </style>

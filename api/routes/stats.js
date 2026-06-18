@@ -466,7 +466,7 @@ router.get("/trains-day", async (req, res, next) => {
         branchShort:   mdir.branchShort || null,
         departureTime: r.departureTime,
         arrivalTime:   r.arrivalTime,
-        formation:     r.formation || "us",
+        formation:     r.formation || null,
         material:      r.material,
         canceled:      !!r.canceled,
         modified:      !!r.modified,
@@ -526,7 +526,7 @@ router.get("/train-detail", async (req, res, next) => {
     res.json({
       trainNumber: meta.trainNumber,
       mission:     meta.mission,
-      formation:   meta.formation || "us",
+      formation:   meta.formation || null,
       material:    meta.material,
       direction:   mdir.direction   || null,
       branchShort: mdir.branchShort || null,
