@@ -45,13 +45,20 @@ router.get("/daily", async (req, res, next) => {
   try {
     const date = parseDate(req.query.date);
 
+    // "unknownCanceled" : équipement non récupéré mais train supprimé — rien d'anormal,
+    // il n'y a simplement pas de composition à aller chercher pour un train qui n'a pas circulé.
     const [[totals]] = await pool.query(
-      `SELECT COUNT(*)                         AS total,
-              SUM(equipmentStatus = 'ok')      AS resolved,
-              SUM(equipmentStatus = 'unknown') AS unknown,
-              SUM(equipmentStatus = 'pending') AS pending
-         FROM trains
-        WHERE date = ?`,
+      `SELECT COUNT(*)                                                          AS total,
+              SUM(t.equipmentStatus = 'ok')                                    AS resolved,
+              SUM(t.equipmentStatus = 'unknown')                               AS unknown,
+              SUM(t.equipmentStatus = 'unknown' AND IFNULL(td.canceled,0) = 1) AS unknownCanceled,
+              SUM(t.equipmentStatus = 'pending')                               AS pending,
+              SUM(t.detailStatus = 'ok')                                       AS detailResolved,
+              SUM(t.detailStatus = 'unknown')                                  AS detailUnknown,
+              SUM(t.detailStatus = 'pending')                                  AS detailPending
+         FROM trains t
+         LEFT JOIN train_details td ON td.trainNumber = t.trainNumber AND td.date = t.date
+        WHERE t.date = ?`,
       [date]
     );
 
@@ -198,11 +205,17 @@ router.get("/daily", async (req, res, next) => {
       coupling,
       branches,
       disruptions: {
-        detail_total: Number(disruptRow.detail_total) || 0,
-        canceled:     Number(disruptRow.canceled)     || 0,
-        delayed:      Number(disruptRow.n_delayed)    || 0,
-        modified:     Number(disruptRow.n_modified)   || 0,
-        avg_delay:    disruptRow.avg_delay != null ? Number(disruptRow.avg_delay) : null,
+        detail_total:    Number(disruptRow.detail_total) || 0,
+        canceled:        Number(disruptRow.canceled)     || 0,
+        delayed:         Number(disruptRow.n_delayed)    || 0,
+        modified:        Number(disruptRow.n_modified)   || 0,
+        avg_delay:       disruptRow.avg_delay != null ? Number(disruptRow.avg_delay) : null,
+        detail_resolved:    Number(totals.detailResolved) || 0,
+        detail_unknown:     Number(totals.detailUnknown)  || 0,
+        detail_pending:     Number(totals.detailPending)  || 0,
+        equipment_unknown:          unknown,
+        equipment_unknown_canceled: Number(totals.unknownCanceled) || 0,
+        equipment_pending:          pending,
       },
     });
   } catch (e) { next(e); }
