@@ -31,10 +31,9 @@ const TABS = [
 function lsGet(k, fb) { try { return localStorage.getItem(k) ?? fb; } catch { return fb; } }
 function lsSet(k, v)  { try { localStorage.setItem(k, v); } catch {} }
 
-const view = ref(lsGet("rere_view", "jour"));
+const view = ref("jour");
 const date = ref(TODAY);
-const period = ref(Number(lsGet("rere_period", "30")) || 30);
-watch(view, (v) => lsSet("rere_view", v));
+const period = ref(Number(lsGet("rere_period", "7")) || 7);
 watch(period, (p) => lsSet("rere_period", p));
 
 const BRANCH_KEYS = ["Chelles", "Tournan", "Villiers", "Central"];
