@@ -40,6 +40,11 @@ function matTotal(b) { return b.material.RERNG + b.material.NAT + b.material.MI2
           </span>
           <span class="db-bl db-bl-coup">UM {{ pct(b.coupling.um, b.coupling.um + b.coupling.us) }}%</span>
         </div>
+        <div class="db-branch-disrupt" v-if="b.canceled || b.delayed || b.modified">
+          <span v-if="b.canceled" class="db-bdtag is-canceled">{{ b.canceled }} supprimé{{ b.canceled > 1 ? 's' : '' }}</span>
+          <span v-if="b.delayed"  class="db-bdtag is-delayed">{{ b.delayed }} en retard</span>
+          <span v-if="b.modified" class="db-bdtag is-modified">{{ b.modified }} modifié{{ b.modified > 1 ? 's' : '' }}</span>
+        </div>
       </div>
     </div>
   </section>

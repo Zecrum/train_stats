@@ -124,6 +124,29 @@ router.get("/daily", async (req, res, next) => {
       [date]
     );
 
+    // Mêmes perturbations, ventilées par branche.
+    const [brDisruptRows] = await pool.query(
+      `SELECT ${BRANCH_CASE}                                            AS branche,
+              SUM(td.canceled)                                        AS canceled,
+              SUM(td.isDelayed = 1 AND td.canceled = 0
+                  AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
+              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified
+         FROM trains t
+         JOIN train_details td USING (trainNumber, date)
+         LEFT JOIN (
+           SELECT trainNumber, date,
+                  MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                           THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                           ELSE NULL END) AS max_delay
+             FROM train_stops
+            WHERE realTime IS NOT NULL AND isDelayed = 1
+            GROUP BY trainNumber, date
+         ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+        WHERE t.date = ? AND t.detailStatus = 'ok' AND ${KNOWN_MISSIONS}
+        GROUP BY 1`,
+      [date]
+    );
+
     const material = emptyMat();
     matRows.forEach((r) => { if (MAT_KEY[r.materiel]) material[MAT_KEY[r.materiel]] += Number(r.n); });
 
@@ -132,7 +155,11 @@ router.get("/daily", async (req, res, next) => {
 
     const branches = {};
     for (const key of Object.keys(BRANCHES)) {
-      branches[key] = { label: BRANCHES[key].label, missions: BRANCHES[key].missions, total: 0, material: emptyMat(), coupling: emptyCoup() };
+      branches[key] = {
+        label: BRANCHES[key].label, missions: BRANCHES[key].missions, total: 0,
+        material: emptyMat(), coupling: emptyCoup(),
+        canceled: 0, delayed: 0, modified: 0,
+      };
     }
     brRows.forEach((r) => {
       const b = branches[r.branche];
@@ -145,6 +172,13 @@ router.get("/daily", async (req, res, next) => {
       b.material.MI2N  = Number(r.n_mi2n)  || 0;
       b.coupling.um    = um;
       b.coupling.us    = total - um;
+    });
+    brDisruptRows.forEach((r) => {
+      const b = branches[r.branche];
+      if (!b) return;
+      b.canceled = Number(r.canceled)   || 0;
+      b.delayed  = Number(r.n_delayed)  || 0;
+      b.modified = Number(r.n_modified) || 0;
     });
 
     const resolved  = Number(totals.resolved) || 0;

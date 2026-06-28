@@ -33,7 +33,7 @@ const byBranch = computed(() => {
         outbound: groups[k].outbound,
         inbound:  groups[k].inbound,
         canceled:  all.filter((t) => t.canceled).length,
-        delayed:   all.filter((t) => !t.canceled && t.delayMinutes > 1).length,
+        delayed:   all.filter((t) => !t.canceled && t.delayMinutes > 2).length,
         modified:  all.filter((t) => !t.canceled && t.modified).length,
       };
     });
@@ -73,7 +73,7 @@ const byBranch = computed(() => {
             <span v-else class="tl-form-spacer"></span>
             <div class="tl-tags">
               <span v-if="t.canceled"                        class="tl-badge is-canceled">Annulé</span>
-              <span v-if="!t.canceled && t.delayMinutes > 1" class="tl-badge is-delayed">+{{ t.delayMinutes }} min</span>
+              <span v-if="!t.canceled && t.delayMinutes > 2" class="tl-badge is-delayed">+{{ t.delayMinutes }} min</span>
               <span v-if="!t.canceled && t.modified"         class="tl-badge is-modified">Modifié</span>
             </div>
           </div>
@@ -94,7 +94,7 @@ const byBranch = computed(() => {
             <span v-else class="tl-form-spacer"></span>
             <div class="tl-tags">
               <span v-if="t.canceled"                        class="tl-badge is-canceled">Annulé</span>
-              <span v-if="!t.canceled && t.delayMinutes > 1" class="tl-badge is-delayed">+{{ t.delayMinutes }} min</span>
+              <span v-if="!t.canceled && t.delayMinutes > 2" class="tl-badge is-delayed">+{{ t.delayMinutes }} min</span>
               <span v-if="!t.canceled && t.modified"         class="tl-badge is-modified">Modifié</span>
             </div>
           </div>

@@ -175,6 +175,12 @@ body { background: #0d1117; }
 .db-bl i { width: 8px; height: 8px; border-radius: 2px; }
 .db-bl-coup { color: var(--c-um); margin-left: auto; }
 
+.db-branch-disrupt { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.db-bdtag { font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+.db-bdtag.is-canceled { background: var(--c-canceled); color: #fff; }
+.db-bdtag.is-delayed  { background: var(--c-delayed);  color: #fff; }
+.db-bdtag.is-modified { background: var(--c-modified); color: #fff; }
+
 /* ---------- charts ---------- */
 .db-chartcard { margin-bottom: 16px; }
 .db-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
