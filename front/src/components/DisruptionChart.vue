@@ -15,7 +15,7 @@ const pctData = computed(() =>
     pctCanceled: d.total > 0 ? Math.round(100 * d.canceled  / d.total) : 0,
     pctDelayed:  d.total > 0 ? Math.round(100 * d.delayed   / d.total) : 0,
     pctModified: d.total > 0 ? Math.round(100 * d.modified  / d.total) : 0,
-    avg_delay:   d.avg_delay ?? null,
+    median_delay: d.median_delay ?? null,
   }))
 );
 
@@ -23,7 +23,7 @@ const series = computed(() => [
   { key: "pctCanceled", label: "% supprimés",          color: palette.value.canceled, axis: "y",      fmt: (v) => v + "%" },
   { key: "pctDelayed",  label: "% en retard ≥ 3 min",  color: palette.value.delayed,  axis: "y",      fmt: (v) => v + "%" },
   { key: "pctModified", label: "% parcours modifiés",   color: palette.value.modified, axis: "y",      fmt: (v) => v + "%" },
-  { key: "avg_delay",   label: "retard moyen",          color: palette.value.dim,      axis: "yRight", fmt: (v) => v != null ? v + " min" : "–", dashed: true },
+  { key: "median_delay", label: "retard médian",        color: palette.value.dim,      axis: "yRight", fmt: (v) => v != null ? v + " min" : "–", dashed: true },
 ]);
 
 const chartData = computed(() => ({

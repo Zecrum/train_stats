@@ -59,8 +59,8 @@ const equipFailedReal = computed(() => {
     </div>
     <div class="db-divider"></div>
     <div>
-      <div class="db-stat-v">{{ disruptions.avg_delay ? disruptions.avg_delay + ' min' : '–' }}</div>
-      <div class="db-stat-l">retard moyen (trains retardés)</div>
+      <div class="db-stat-v">{{ disruptions.median_delay ? disruptions.median_delay + ' min' : '–' }}</div>
+      <div class="db-stat-l">retard médian (trains retardés)</div>
     </div>
   </section>
 </template>

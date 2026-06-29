@@ -104,18 +104,14 @@ router.get("/daily", async (req, res, next) => {
       [date]
     );
 
-    // Perturbations — source SNCF Connect (detailStatus = 'ok').
+    // Perturbations — source SNCF Connect/Voyageurs (detailStatus = 'ok').
     // "n_delayed" évite le mot réservé DELAYED en MariaDB.
     const [[disruptRow]] = await pool.query(
       `SELECT COUNT(*)                                                 AS detail_total,
               SUM(td.canceled)                                        AS canceled,
               SUM(td.isDelayed = 1 AND td.canceled = 0
                   AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
-              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
-              ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
-                             AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2
-                             THEN COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay)
-                        END))                                        AS avg_delay
+              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified
          FROM trains t
          JOIN train_details td USING (trainNumber, date)
          LEFT JOIN (
@@ -130,6 +126,33 @@ router.get("/daily", async (req, res, next) => {
         WHERE t.date = ? AND t.detailStatus = 'ok'`,
       [date]
     );
+
+    // Retard médian (plutôt que moyen) : robuste aux incidents isolés qui faussent
+    // une moyenne (ex. un train à +90 min ne doit pas donner l'impression que
+    // "les trains retardés perdent ~20 min en moyenne").
+    const [medianRows] = await pool.query(
+      `SELECT MEDIAN(eff_delay) OVER () AS median_delay
+         FROM (
+           SELECT COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
+             FROM trains t
+             JOIN train_details td USING (trainNumber, date)
+             LEFT JOIN (
+               SELECT trainNumber, date,
+                      MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                               THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                               ELSE NULL END) AS max_delay
+                 FROM train_stops
+                WHERE realTime IS NOT NULL AND isDelayed = 1
+                GROUP BY trainNumber, date
+             ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+            WHERE t.date = ? AND t.detailStatus = 'ok'
+              AND td.isDelayed = 1 AND td.canceled = 0
+         ) base
+        WHERE eff_delay > 2
+        LIMIT 1`,
+      [date]
+    );
+    const medianDelay = medianRows[0]?.median_delay ?? null;
 
     // Mêmes perturbations, ventilées par branche.
     const [brDisruptRows] = await pool.query(
@@ -209,7 +232,7 @@ router.get("/daily", async (req, res, next) => {
         canceled:        Number(disruptRow.canceled)     || 0,
         delayed:         Number(disruptRow.n_delayed)    || 0,
         modified:        Number(disruptRow.n_modified)   || 0,
-        avg_delay:       disruptRow.avg_delay != null ? Number(disruptRow.avg_delay) : null,
+        median_delay:    medianDelay != null ? Number(medianDelay) : null,
         detail_resolved:    Number(totals.detailResolved) || 0,
         detail_unknown:     Number(totals.detailUnknown)  || 0,
         detail_pending:     Number(totals.detailPending)  || 0,
@@ -351,11 +374,7 @@ router.get("/disruptions", async (req, res, next) => {
               SUM(td.canceled)                                        AS canceled,
               SUM(td.isDelayed = 1 AND td.canceled = 0
                   AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2) AS n_delayed,
-              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified,
-              ROUND(AVG(CASE WHEN td.isDelayed = 1 AND td.canceled = 0
-                             AND COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) > 2
-                             THEN COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay)
-                        END))                                        AS avg_delay
+              SUM(td.courseModified = 1 AND td.canceled = 0)         AS n_modified
          FROM trains t
          JOIN train_details td USING (trainNumber, date)
          LEFT JOIN (
@@ -373,6 +392,32 @@ router.get("/disruptions", async (req, res, next) => {
         ORDER BY t.date`,
       [end, days - 1, end]
     );
+
+    // Retard médian par jour (plutôt que moyen — cf. /daily, robuste aux incidents isolés).
+    const [medianRows] = await pool.query(
+      `SELECT DISTINCT date, MEDIAN(eff_delay) OVER (PARTITION BY date) AS median_delay
+         FROM (
+           SELECT t.date,
+                  COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
+             FROM trains t
+             JOIN train_details td USING (trainNumber, date)
+             LEFT JOIN (
+               SELECT trainNumber, date,
+                      MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                               THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                               ELSE NULL END) AS max_delay
+                 FROM train_stops
+                WHERE realTime IS NOT NULL AND isDelayed = 1
+                GROUP BY trainNumber, date
+             ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+            WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+              AND t.detailStatus = 'ok'
+              AND td.isDelayed = 1 AND td.canceled = 0
+         ) base
+        WHERE eff_delay > 2`,
+      [end, days - 1, end]
+    );
+    const medianByDate = new Map(medianRows.map((r) => [String(r.date), Number(r.median_delay)]));
 
     const [[distrib]] = await pool.query(
       `SELECT SUM(eff_delay BETWEEN 3  AND 5)  AS d3_5,
@@ -446,12 +491,12 @@ router.get("/disruptions", async (req, res, next) => {
     res.set("Cache-Control", cacheFor(end));
     res.json({
       evolution: evoRows.map((r) => ({
-        date:      r.date,
-        total:     Number(r.total)      || 0,
-        canceled:  Number(r.canceled)   || 0,
-        delayed:   Number(r.n_delayed)  || 0,
-        modified:  Number(r.n_modified) || 0,
-        avg_delay: r.avg_delay != null ? Number(r.avg_delay) : null,
+        date:         r.date,
+        total:        Number(r.total)      || 0,
+        canceled:     Number(r.canceled)   || 0,
+        delayed:      Number(r.n_delayed)  || 0,
+        modified:     Number(r.n_modified) || 0,
+        median_delay: medianByDate.has(String(r.date)) ? medianByDate.get(String(r.date)) : null,
       })),
       distribution: {
         d3_5:    Number(distrib.d3_5)    || 0,

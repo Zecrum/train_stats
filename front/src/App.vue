@@ -120,9 +120,9 @@ const disruptionStats = computed(() => {
   const avgCanceled  = Math.round(evo.reduce((a, d) => a + (d.total ? 100 * d.canceled  / d.total : 0), 0) / n);
   const avgDelayed   = Math.round(evo.reduce((a, d) => a + (d.total ? 100 * d.delayed   / d.total : 0), 0) / n);
   const avgModified  = Math.round(evo.reduce((a, d) => a + (d.total ? 100 * d.modified  / d.total : 0), 0) / n);
-  const withDelay    = evo.filter((d) => d.avg_delay != null);
-  const avgDelay     = withDelay.length ? Math.round(withDelay.reduce((a, d) => a + d.avg_delay, 0) / withDelay.length) : null;
-  return { n, avgCanceled, avgDelayed, avgModified, avgDelay };
+  const withDelay    = evo.filter((d) => d.median_delay != null);
+  const medianDelay  = withDelay.length ? Math.round(withDelay.reduce((a, d) => a + d.median_delay, 0) / withDelay.length) : null;
+  return { n, avgCanceled, avgDelayed, avgModified, medianDelay };
 });
 const distribBuckets = computed(() => {
   if (!disruptions.value?.distribution) return [];
@@ -307,7 +307,7 @@ const evoStats = computed(() => {
         <section class="db-panel db-chartcard" style="margin-top:14px" v-if="disruptions?.evolution">
           <div class="db-panel-h">// taux de perturbation par jour</div>
           <DisruptionChart :evolution="disruptions.evolution" />
-          <div class="db-foot-note">/api/stats/disruptions?days={{ period }} · {{ disruptionStats?.n || 0 }} jours · source SNCF Connect</div>
+          <div class="db-foot-note">/api/stats/disruptions?days={{ period }} · {{ disruptionStats?.n || 0 }} jours · source SNCF Connect/Voyageurs</div>
         </section>
       </template>
 
@@ -327,7 +327,7 @@ const evoStats = computed(() => {
           <div><div class="db-stat-v" style="color:var(--c-delayed)">{{ disruptionStats.avgDelayed }}%</div><div class="db-stat-l">en retard ≥ 3 min (moy. journalière)</div></div>
           <div><div class="db-stat-v" style="color:var(--c-modified)">{{ disruptionStats.avgModified }}%</div><div class="db-stat-l">parcours modifiés (moy. journalière)</div></div>
           <div class="db-divider"></div>
-          <div><div class="db-stat-v">{{ disruptionStats.avgDelay ? disruptionStats.avgDelay + ' min' : '–' }}</div><div class="db-stat-l">retard moyen (trains retardés)</div></div>
+          <div><div class="db-stat-v">{{ disruptionStats.medianDelay ? disruptionStats.medianDelay + ' min' : '–' }}</div><div class="db-stat-l">retard médian (trains retardés)</div></div>
         </section>
 
         <div class="db-row2">
