@@ -20,10 +20,12 @@ const { theme, toggle } = useTheme();
 
 const appVersion = __APP_VERSION__;
 
-const TABS = [
+const DAY_TABS = [
   { id: "jour",          label: "Jour J" },
   { id: "trains",        label: "Trains" },
   { id: "horaire",       label: "Répartition horaire" },
+];
+const PERIOD_TABS = [
   { id: "evolution",     label: "Évolution" },
   { id: "perturbations", label: "Perturbations" },
 ];
@@ -198,15 +200,31 @@ const evoStats = computed(() => {
       </header>
 
       <nav class="db-tabs">
-        <button
-          v-for="t in TABS"
-          :key="t.id"
-          class="db-tab"
-          :class="{ 'is-active': view === t.id }"
-          @click="view = t.id"
-        >
-          <span class="db-tab-dot"></span>{{ t.label }}
-        </button>
+        <div class="db-tabgroup">
+          <span class="db-tabgroup-label">Jour</span>
+          <button
+            v-for="t in DAY_TABS"
+            :key="t.id"
+            class="db-tab"
+            :class="{ 'is-active': view === t.id }"
+            @click="view = t.id"
+          >
+            <span class="db-tab-dot"></span>{{ t.label }}
+          </button>
+        </div>
+        <div class="db-tabs-sep"></div>
+        <div class="db-tabgroup">
+          <span class="db-tabgroup-label">Période</span>
+          <button
+            v-for="t in PERIOD_TABS"
+            :key="t.id"
+            class="db-tab"
+            :class="{ 'is-active': view === t.id }"
+            @click="view = t.id"
+          >
+            <span class="db-tab-dot"></span>{{ t.label }}
+          </button>
+        </div>
       </nav>
 
       <div class="db-loader" :class="{ 'is-active': loading }"><div class="db-loader-bar"></div></div>
@@ -274,7 +292,7 @@ const evoStats = computed(() => {
         <section class="db-panel">
           <div class="db-panel-h">
             // évolution sur période glissante
-            <span class="db-ph-right" style="float:right">
+            <span class="db-ph-right">
               <span class="db-period">
                 <button v-for="p in [7, 30, 90]" :key="p" :class="{ 'is-active': period === p }" @click="period = p">{{ p }} j</button>
               </span>
@@ -304,11 +322,6 @@ const evoStats = computed(() => {
           <EvolutionChart :evolution="evolution" />
           <div class="db-foot-note">/api/stats/evolution?days={{ period }} · {{ evoStats.n }} points journaliers</div>
         </section>
-        <section class="db-panel db-chartcard" style="margin-top:14px" v-if="disruptions?.evolution">
-          <div class="db-panel-h">// taux de perturbation par jour</div>
-          <DisruptionChart :evolution="disruptions.evolution" />
-          <div class="db-foot-note">/api/stats/disruptions?days={{ period }} · {{ disruptionStats?.n || 0 }} jours · source SNCF Connect/Voyageurs</div>
-        </section>
       </template>
 
       <!-- ===== Vue Perturbations ===== -->
@@ -328,6 +341,12 @@ const evoStats = computed(() => {
           <div><div class="db-stat-v" style="color:var(--c-modified)">{{ disruptionStats.avgModified }}%</div><div class="db-stat-l">parcours modifiés (moy. journalière)</div></div>
           <div class="db-divider"></div>
           <div><div class="db-stat-v">{{ disruptionStats.medianDelay ? disruptionStats.medianDelay + ' min' : '–' }}</div><div class="db-stat-l">retard médian (trains retardés)</div></div>
+        </section>
+
+        <section class="db-panel db-chartcard" v-if="disruptions?.evolution">
+          <div class="db-panel-h">// taux de perturbation par jour</div>
+          <DisruptionChart :evolution="disruptions.evolution" />
+          <div class="db-foot-note">/api/stats/disruptions?days={{ period }} · {{ disruptionStats?.n || 0 }} jours · source SNCF Connect/Voyageurs</div>
         </section>
 
         <div class="db-row2">

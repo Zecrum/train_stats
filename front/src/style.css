@@ -124,7 +124,13 @@ body { background: #0d1117; }
   color: var(--text); border-radius: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .db-theme:hover { border-color: var(--dim); }
-.db-tabs { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 4px; margin-bottom: 16px; }
+.db-tabs { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 4px; margin-bottom: 16px; }
+.db-tabgroup { display: flex; align-items: center; gap: 4px; }
+.db-tabgroup-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600; color: var(--faint);
+  text-transform: uppercase; letter-spacing: 0.6px; padding: 0 8px 0 6px; flex-shrink: 0;
+}
+.db-tabs-sep { width: 1px; align-self: stretch; background: var(--line2); flex-shrink: 0; margin: 4px 0; }
 .db-tab {
   border: none; background: transparent; color: var(--dim); font-family: "IBM Plex Mono", monospace;
   font-size: 13px; padding: 9px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;
@@ -245,6 +251,8 @@ body { background: #0d1117; }
   .db-tabs      { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .db-tabs::-webkit-scrollbar { display: none; }
   .db-tab       { white-space: nowrap; padding: 8px 10px; font-size: 12px; gap: 6px; }
+  .db-tabgroup-label { display: none; }
+  .db-tabs-sep  { margin: 4px 2px; }
   .db-donutwrap { flex-wrap: wrap; justify-content: center; }
   .db-stat-v    { font-size: 22px; }
   .db-branch-total { font-size: 20px; }
@@ -252,7 +260,10 @@ body { background: #0d1117; }
   .db-chartbox  { height: 200px; }
   .db-evo-stat .db-evo-v { font-size: 18px; }
   .db-legendrow { gap: 10px; }
-  .db-period button { padding: 4px 8px; font-size: 11px; }
+  .db-panel-h   { display: flex; flex-wrap: wrap; row-gap: 8px; }
+  .db-ph-right  { float: none; width: 100%; }
+  .db-period    { flex-wrap: wrap; }
+  .db-period button { padding: 8px 11px; font-size: 12px; }
   .db-evo-stats { gap: 16px; }
   .db-branch-name { font-size: 13px; }
   .db-foot-note { word-break: break-all; }
