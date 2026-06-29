@@ -2,10 +2,10 @@
 const mysql = require("mysql2/promise");
 
 /**
- * Pool MySQL partagé avec le collecteur — utilisé en LECTURE SEULE.
- * Crée idéalement un utilisateur MySQL dédié avec uniquement le droit SELECT :
- *   CREATE USER 'rer_e_readonly'@'localhost' IDENTIFIED BY '...';
- *   GRANT SELECT ON rer_e_stats.* TO 'rer_e_readonly'@'localhost';
+ * Pool MySQL partagé avec le collecteur. Les routes /api/stats sont en lecture
+ * seule, mais /api/admin (protégé par JWT) écrit via ce même pool — voir
+ * .env.example pour les droits MySQL nécessaires (SELECT + INSERT/UPDATE/DELETE
+ * sur trains/train_sets).
  */
 const pool = mysql.createPool({
   host: process.env.DB_HOST,

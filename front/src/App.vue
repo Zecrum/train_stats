@@ -15,8 +15,10 @@ import TrainList from "./components/TrainList.vue";
 import EvolutionChart from "./components/EvolutionChart.vue";
 import DisruptionBar from "./components/DisruptionBar.vue";
 import DisruptionChart from "./components/DisruptionChart.vue";
+import AdminPanel from "./components/AdminPanel.vue";
 
 const { theme, toggle } = useTheme();
+const showAdmin = ref(false);
 
 const appVersion = __APP_VERSION__;
 
@@ -196,8 +198,11 @@ const evoStats = computed(() => {
           <button class="db-theme" @click="toggle" title="Basculer le thème">
             {{ theme === "dark" ? "☀" : "☾" }}
           </button>
+          <button class="db-theme" @click="showAdmin = true" title="Administration">🔒</button>
         </div>
       </header>
+
+      <AdminPanel v-if="showAdmin" @close="showAdmin = false" />
 
       <nav class="db-tabs">
         <div class="db-tabgroup">

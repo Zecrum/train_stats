@@ -161,6 +161,44 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 
 ---
 
+## Panel admin
+
+Accessible via l'icône 🔒 en haut du dashboard. Protégé par mot de passe (`ADMIN_PASSWORD`) + JWT (`ADMIN_JWT_SECRET`), tous deux dans `api/.env`. Permet de :
+
+- voir les trains dont la collecte équipement/détail a échoué (`equipmentStatus`/`detailStatus = 'unknown'`, ou `pending` depuis trop longtemps) — exclut automatiquement les trains supprimés, pour qui l'absence d'équipement est normale
+- relancer la collecte équipement ou détail d'un train précis — ne fait que repasser son statut à `pending` en base ; c'est le **collecteur** (process séparé, cron interne toutes les minutes) qui reprend réellement le train, donc il doit être en cours d'exécution pour que la relance ait un effet
+- saisir l'équipement manuellement (matériel + formation US/UM) quand la collecte automatique ne pourra jamais réussir
+- ouvrir le train sur SNCF Connect / SNCF Voyageurs / Transilien (équipement) pour vérifier à la main
+
+### `POST /api/admin/login`
+
+```json
+{ "password": "..." }
+```
+→ `{ "token": "<jwt>" }` (expire après 12h). Les autres routes `/api/admin/*` exigent `Authorization: Bearer <token>`.
+
+### `GET /api/admin/unresolved?date=YYYY-MM-DD`
+
+Sans `date`, fenêtre des 14 derniers jours. Retourne les trains non résolus (voir critères ci-dessus).
+
+### `POST /api/admin/retry-equipment` · `POST /api/admin/retry-detail`
+
+```json
+{ "trainNumber": "847907", "date": "2026-06-13" }
+```
+Remet `equipmentStatus`/`detailStatus` à `pending` (reset des compteurs de retry).
+
+### `POST /api/admin/equipment`
+
+```json
+{ "trainNumber": "847907", "date": "2026-06-13", "formation": "UM", "units": [{ "rollingStock": "RERNG" }, { "rollingStock": "RERNG" }] }
+```
+Écrit directement `train_sets` + `trains.formation`/`equipmentStatus = 'ok'`.
+
+> Ces routes écrivent en base via le même utilisateur MySQL que les routes `/api/stats` (lecture seule) — voir [Configuration](#configuration) pour les droits `GRANT` nécessaires.
+
+---
+
 ## Stack technique
 
 | Composant | Technologie |
@@ -173,6 +211,7 @@ Port par défaut : **3051**. CORS configuré via `CORS_ORIGIN` dans `.env`.
 | Driver MySQL | mysql2/promise |
 | Build tool | Vite |
 | Collecteur | Node.js + node-cron + axios |
+| Auth panel admin | JWT (jsonwebtoken) |
 
 ---
 
@@ -192,32 +231,40 @@ train_stats/
 │   ├── logger.js          # Logs fichier + console
 │   └── .env               # Variables d'environnement (écriture)
 ├── api/
-│   ├── index.js          # Point d'entrée Express + CORS
-│   ├── db.js             # Pool MySQL partagé (lecture seule)
+│   ├── index.js          # Point d'entrée Express + CORS + express.json()
+│   ├── db.js             # Pool MySQL partagé (lecture pour /stats, écriture pour /admin)
+│   ├── middleware/
+│   │   └── auth.js       # requireAdmin — vérif JWT (Authorization: Bearer)
 │   ├── routes/
-│   │   └── stats.js      # /daily, /hourly, /evolution
-│   └── .env              # Variables d'environnement
+│   │   ├── stats.js      # /daily, /hourly, /evolution, /disruptions, /trains-day, /train-detail
+│   │   └── admin.js      # /login, /unresolved, /retry-equipment, /retry-detail, /equipment
+│   └── .env               # Variables d'environnement
 └── front/
     ├── public/
     │   └── Train-Stats.png   # Favicon
     ├── index.html
     ├── src/
     │   ├── main.js
-    │   ├── App.vue           # Orchestration, routing vues, loader
-    │   ├── api.js            # Client fetch → API REST
-    │   ├── utils.js          # pct(), fmtLong(), fmtShort(), MATERIALS
+    │   ├── App.vue           # Orchestration, onglets (Jour/Période), loader
+    │   ├── api.js            # Client fetch → API REST (+ api.admin.*)
+    │   ├── utils.js          # pct(), fmtLong(), fmtShort(), MATERIALS, TODAY
     │   ├── palette.js        # Couleurs Chart.js par thème (dark/light)
     │   ├── style.css         # Styles globaux + responsive (768px / 480px)
     │   ├── composables/
-    │   │   └── useTheme.js   # Thème dark/light persisté en localStorage
+    │   │   ├── useTheme.js      # Thème dark/light persisté en localStorage
+    │   │   └── useAdminAuth.js  # Token JWT persisté en localStorage
     │   └── components/
     │       ├── DatePicker.vue
-    │       ├── MetricsBar.vue
     │       ├── MaterialDonut.vue
     │       ├── CouplingCard.vue
     │       ├── BranchGrid.vue
     │       ├── HourlyChart.vue
-    │       └── EvolutionChart.vue
+    │       ├── HourlyDisruptionChart.vue
+    │       ├── HourlyTotalDelayChart.vue
+    │       ├── TrainList.vue / TrainDetailPanel.vue
+    │       ├── EvolutionChart.vue
+    │       ├── DisruptionBar.vue / DisruptionChart.vue
+    │       └── AdminPanel.vue   # Panel admin (login + tableau + actions)
     ├── vite.config.js
     └── package.json
 ```
@@ -244,9 +291,17 @@ DB_PASSWORD=
 DB_NAME=rer_e_stats
 PORT=3051
 CORS_ORIGIN=http://localhost:5173
+
+# Panel admin (/api/admin) — mot de passe + secret JWT, ex: openssl rand -hex 32
+ADMIN_PASSWORD=
+ADMIN_JWT_SECRET=
 ```
 
-> L'API REST est en **lecture seule** — aucune écriture depuis le dashboard. Seul le collecteur écrit en base.  
+> Les routes `/api/stats` sont en **lecture seule**. Les routes `/api/admin` (protégées par mot de passe + JWT) écrivent en base via le même utilisateur MySQL — s'il n'a que `SELECT`, il faut élargir ses droits :
+> ```sql
+> GRANT SELECT, INSERT, UPDATE, DELETE ON rer_e_stats.trains     TO 'rer_e_readonly'@'localhost';
+> GRANT SELECT, INSERT, UPDATE, DELETE ON rer_e_stats.train_sets TO 'rer_e_readonly'@'localhost';
+> ```
 > CORS fail-closed : sans `CORS_ORIGIN`, toute requête cross-origin est refusée.
 
 ---

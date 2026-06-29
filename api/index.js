@@ -5,6 +5,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const statsRouter = require("./routes/stats");
+const adminRouter = require("./routes/admin");
 
 const VERSION = fs.readFileSync(path.join(__dirname, "..", "VERSION"), "utf-8").trim();
 
@@ -15,8 +16,10 @@ const origins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
   : [];
 app.use(cors({ origin: origins.length ? origins : false }));
+app.use(express.json());
 
 app.use("/api/stats", statsRouter);
+app.use("/api/admin", adminRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, version: VERSION }));
 
