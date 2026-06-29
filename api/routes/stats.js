@@ -130,26 +130,33 @@ router.get("/daily", async (req, res, next) => {
     // Retard médian (plutôt que moyen) : robuste aux incidents isolés qui faussent
     // une moyenne (ex. un train à +90 min ne doit pas donner l'impression que
     // "les trains retardés perdent ~20 min en moyenne").
+    // Médiane portable (MySQL 8 / MariaDB) via ROW_NUMBER()+COUNT() OVER() — la
+    // fonction agrégée MEDIAN() n'existe que sur MariaDB et n'est pas disponible ici.
     const [medianRows] = await pool.query(
-      `SELECT MEDIAN(eff_delay) OVER () AS median_delay
+      `SELECT AVG(eff_delay) AS median_delay
          FROM (
-           SELECT COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
-             FROM trains t
-             JOIN train_details td USING (trainNumber, date)
-             LEFT JOIN (
-               SELECT trainNumber, date,
-                      MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
-                               THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
-                               ELSE NULL END) AS max_delay
-                 FROM train_stops
-                WHERE realTime IS NOT NULL AND isDelayed = 1
-                GROUP BY trainNumber, date
-             ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
-            WHERE t.date = ? AND t.detailStatus = 'ok'
-              AND td.isDelayed = 1 AND td.canceled = 0
-         ) base
-        WHERE eff_delay > 2
-        LIMIT 1`,
+           SELECT eff_delay,
+                  ROW_NUMBER() OVER (ORDER BY eff_delay) AS rn,
+                  COUNT(*)     OVER ()                   AS cnt
+             FROM (
+               SELECT COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
+                 FROM trains t
+                 JOIN train_details td USING (trainNumber, date)
+                 LEFT JOIN (
+                   SELECT trainNumber, date,
+                          MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                                   THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                                   ELSE NULL END) AS max_delay
+                     FROM train_stops
+                    WHERE realTime IS NOT NULL AND isDelayed = 1
+                    GROUP BY trainNumber, date
+                 ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+                WHERE t.date = ? AND t.detailStatus = 'ok'
+                  AND td.isDelayed = 1 AND td.canceled = 0
+             ) base
+            WHERE eff_delay > 2
+         ) ranked
+        WHERE rn IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2))`,
       [date]
     );
     const medianDelay = medianRows[0]?.median_delay ?? null;
@@ -394,27 +401,35 @@ router.get("/disruptions", async (req, res, next) => {
     );
 
     // Retard médian par jour (plutôt que moyen — cf. /daily, robuste aux incidents isolés).
+    // Médiane portable (MySQL 8 / MariaDB) via ROW_NUMBER()+COUNT() OVER(), partitionnés par date.
     const [medianRows] = await pool.query(
-      `SELECT DISTINCT date, MEDIAN(eff_delay) OVER (PARTITION BY date) AS median_delay
+      `SELECT date, AVG(eff_delay) AS median_delay
          FROM (
-           SELECT t.date,
-                  COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
-             FROM trains t
-             JOIN train_details td USING (trainNumber, date)
-             LEFT JOIN (
-               SELECT trainNumber, date,
-                      MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
-                               THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
-                               ELSE NULL END) AS max_delay
-                 FROM train_stops
-                WHERE realTime IS NOT NULL AND isDelayed = 1
-                GROUP BY trainNumber, date
-             ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
-            WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
-              AND t.detailStatus = 'ok'
-              AND td.isDelayed = 1 AND td.canceled = 0
-         ) base
-        WHERE eff_delay > 2`,
+           SELECT date, eff_delay,
+                  ROW_NUMBER() OVER (PARTITION BY date ORDER BY eff_delay) AS rn,
+                  COUNT(*)     OVER (PARTITION BY date)                   AS cnt
+             FROM (
+               SELECT t.date,
+                      COALESCE(NULLIF(GREATEST(td.delayMinutes, 0), 0), sd.max_delay) AS eff_delay
+                 FROM trains t
+                 JOIN train_details td USING (trainNumber, date)
+                 LEFT JOIN (
+                   SELECT trainNumber, date,
+                          MAX(CASE WHEN TIME_TO_SEC(realTime) > TIME_TO_SEC(scheduledTime)
+                                   THEN ROUND((TIME_TO_SEC(realTime) - TIME_TO_SEC(scheduledTime)) / 60)
+                                   ELSE NULL END) AS max_delay
+                     FROM train_stops
+                    WHERE realTime IS NOT NULL AND isDelayed = 1
+                    GROUP BY trainNumber, date
+                 ) sd ON sd.trainNumber = t.trainNumber AND sd.date = t.date
+                WHERE t.date BETWEEN (? - INTERVAL ? DAY) AND ?
+                  AND t.detailStatus = 'ok'
+                  AND td.isDelayed = 1 AND td.canceled = 0
+             ) base
+            WHERE eff_delay > 2
+         ) ranked
+        WHERE rn IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2))
+        GROUP BY date`,
       [end, days - 1, end]
     );
     const medianByDate = new Map(medianRows.map((r) => [String(r.date), Number(r.median_delay)]));
