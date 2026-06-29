@@ -58,6 +58,17 @@ function onLogout() {
   rows.value = [];
 }
 
+// Token expiré/invalide (401) → on déconnecte et redemande le mot de passe,
+// plutôt que d'afficher une erreur HTTP brute en boucle.
+function handleApiError(e) {
+  if (e.message.includes("401")) {
+    onLogout();
+    error.value = "Session expirée, reconnecte-toi.";
+  } else {
+    error.value = e.message;
+  }
+}
+
 const dateFilter = ref(TODAY);
 const rows = ref([]);
 const loading = ref(false);
@@ -89,7 +100,7 @@ async function load() {
     rows.value = unresolved;
     daily.value = d;
   } catch (e) {
-    error.value = e.message;
+    handleApiError(e);
   } finally {
     loading.value = false;
   }
@@ -100,7 +111,7 @@ async function retryEquipment(r) {
     await api.admin.retryEquipment(r.trainNumber, r.date);
     r.equipmentStatus = "pending";
     r.equipmentRetries = 0;
-  } catch (e) { error.value = e.message; }
+  } catch (e) { handleApiError(e); }
 }
 
 async function retryDetail(r) {
@@ -108,7 +119,7 @@ async function retryDetail(r) {
     await api.admin.retryDetail(r.trainNumber, r.date);
     r.detailStatus = "pending";
     r.detailRetries = 0;
-  } catch (e) { error.value = e.message; }
+  } catch (e) { handleApiError(e); }
 }
 
 const manualTrain = ref(null);
@@ -139,7 +150,12 @@ async function submitManual() {
     manualTrain.value.material = f.unit1;
     manualTrain.value = null;
   } catch (e) {
-    manualError.value = e.message;
+    if (e.message.includes("401")) {
+      manualTrain.value = null;
+      handleApiError(e);
+    } else {
+      manualError.value = e.message;
+    }
   }
 }
 

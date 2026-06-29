@@ -2,6 +2,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 const pool = require("../db");
 const { requireAdmin } = require("../middleware/auth");
 
@@ -16,10 +17,19 @@ function timingSafeEqualStr(a, b) {
   return crypto.timingSafeEqual(ha, hb);
 }
 
+// 5 tentatives / 15 min par IP — limite le bruteforce sur le mot de passe admin.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_attempts" },
+});
+
 /* -------------------------------------------------------------------------- */
 /* POST /api/admin/login                                                      */
 /* -------------------------------------------------------------------------- */
-router.post("/login", (req, res) => {
+router.post("/login", loginLimiter, (req, res) => {
   const { password } = req.body || {};
   if (!password || !timingSafeEqualStr(password, process.env.ADMIN_PASSWORD || "")) {
     return res.status(401).json({ error: "invalid_credentials" });
@@ -133,18 +143,28 @@ router.post("/equipment", async (req, res, next) => {
       }
     }
 
-    await pool.query("DELETE FROM train_sets WHERE trainNumber = ? AND date = ?", [trainNumber, date]);
-    for (let i = 0; i < units.length; i++) {
-      await pool.query(
-        `INSERT INTO train_sets (trainNumber, date, position, rollingStock, coaches) VALUES (?, ?, ?, ?, ?)`,
-        [trainNumber, date, i + 1, units[i].rollingStock, units[i].coaches || null]
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query("DELETE FROM train_sets WHERE trainNumber = ? AND date = ?", [trainNumber, date]);
+      for (let i = 0; i < units.length; i++) {
+        await conn.query(
+          `INSERT INTO train_sets (trainNumber, date, position, rollingStock, coaches) VALUES (?, ?, ?, ?, ?)`,
+          [trainNumber, date, i + 1, units[i].rollingStock, units[i].coaches || null]
+        );
+      }
+      await conn.query(
+        `UPDATE trains SET formation = ?, equipmentStatus = 'ok', equipmentFetchedAt = NOW()
+          WHERE trainNumber = ? AND date = ?`,
+        [formation, trainNumber, date]
       );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
     }
-    await pool.query(
-      `UPDATE trains SET formation = ?, equipmentStatus = 'ok', equipmentFetchedAt = NOW()
-        WHERE trainNumber = ? AND date = ?`,
-      [formation, trainNumber, date]
-    );
 
     res.json({ ok: true });
   } catch (e) { next(e); }
