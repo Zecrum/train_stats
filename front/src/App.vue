@@ -16,9 +16,11 @@ import EvolutionChart from "./components/EvolutionChart.vue";
 import DisruptionBar from "./components/DisruptionBar.vue";
 import DisruptionChart from "./components/DisruptionChart.vue";
 import AdminPanel from "./components/AdminPanel.vue";
+import LegalNotice from "./components/LegalNotice.vue";
 
 const { theme, toggle } = useTheme();
 const showAdmin = ref(false);
+const showLegal = ref(false);
 
 const appVersion = __APP_VERSION__;
 
@@ -203,6 +205,7 @@ const evoStats = computed(() => {
       </header>
 
       <AdminPanel v-if="showAdmin" @close="showAdmin = false" />
+      <LegalNotice v-if="showLegal" @close="showLegal = false" />
 
       <nav class="db-tabs">
         <div class="db-tabgroup">
@@ -414,7 +417,13 @@ const evoStats = computed(() => {
       <p v-else-if="!error && !loading" class="db-loading">Chargement…</p>
       </div>
 
-      <footer class="db-version">v{{ appVersion }}</footer>
+      <footer class="db-footer">
+        <p class="db-disclaimer">Site non affilié à la SNCF, SNCF Connect, SNCF Voyageurs ni Île-de-France Mobilités — projet personnel non officiel.</p>
+        <p class="db-version">
+          v{{ appVersion }} ·
+          <button class="db-legal-link" @click="showLegal = true">Mentions légales</button>
+        </p>
+      </footer>
     </div>
   </div>
 </template>
@@ -456,7 +465,11 @@ const evoStats = computed(() => {
 .db-bk-val      { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--faint); min-width: 32px; text-align: right; }
 .db-bk-val2     { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--c-canceled); min-width: 54px; text-align: right; }
 
-.db-version { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); text-align: center; margin-top: 24px; opacity: 0.6; }
+.db-footer { margin-top: 24px; text-align: center; }
+.db-disclaimer { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); opacity: 0.7; margin: 0 0 4px; }
+.db-version { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--faint); opacity: 0.6; margin: 0; }
+.db-legal-link { background: none; border: none; padding: 0; font: inherit; color: var(--faint); text-decoration: underline; cursor: pointer; opacity: 0.85; }
+.db-legal-link:hover { color: var(--text); }
 
 
 </style>
