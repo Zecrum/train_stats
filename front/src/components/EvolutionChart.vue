@@ -8,20 +8,27 @@ import { useTheme } from "../composables/useTheme.js";
 const props = defineProps({ evolution: Array });
 const { palette } = useTheme();
 
+// RER NG et NAT sont climatisés, contrairement au MI2N — % calculé côté front,
+// pas besoin de remonter cette donnée depuis l'API (déjà dispo via pctRERNG/pctNAT).
+const evolutionWithClim = computed(() =>
+  props.evolution.map((d) => ({ ...d, pctClim: d.pctRERNG + d.pctNAT }))
+);
+
 const series = computed(() => [
   { key: "pctRERNG", label: "% RER NG", color: palette.value.rerng },
   { key: "pctNAT", label: "% NAT", color: palette.value.nat },
   { key: "pctMI2N", label: "% MI2N", color: palette.value.mi2n },
+  { key: "pctClim", label: "% rames climatisées (RER NG + NAT)", color: palette.value.clim, dashed: true },
   { key: "pctCoupled", label: "% compositions couplées (UM)", color: palette.value.um, dashed: true },
 ]);
 
 const dense = computed(() => props.evolution.length > 16);
 
 const chartData = computed(() => ({
-  labels: props.evolution.map((d) => fmtShort(d.date)),
+  labels: evolutionWithClim.value.map((d) => fmtShort(d.date)),
   datasets: series.value.map((s) => ({
     label: s.label,
-    data: props.evolution.map((d) => d[s.key]),
+    data: evolutionWithClim.value.map((d) => d[s.key]),
     borderColor: s.color,
     backgroundColor: s.color,
     borderWidth: 2.5,
