@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Collecte automatique de la composition des trains du RER E",
   "main": "index.js",
+  "license": "MIT",
   "scripts": {
     "start": "node index.js"
   },

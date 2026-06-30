@@ -4,6 +4,7 @@
   "description": "API REST lecture seule — statistiques de composition RER E",
   "type": "commonjs",
   "main": "index.js",
+  "license": "MIT",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js"

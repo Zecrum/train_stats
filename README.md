@@ -1,6 +1,12 @@
 # Transilien Stats
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques de composition du matériel roulant.
+
+**Démo en ligne :** [train-stats.zecrum.fr](https://train-stats.zecrum.fr)
+
+> Projet personnel et non-officiel, sans lien avec la SNCF. Les données affichées proviennent d'API publiques non-documentées de SNCF Connect/Voyageurs/Transilien — voir la page **Mentions légales** du dashboard pour le détail.
 
 ---
 
@@ -297,14 +303,13 @@ ADMIN_PASSWORD=
 ADMIN_JWT_SECRET=
 ```
 
-> Les routes `/api/stats` sont en **lecture seule**. Les routes `/api/admin` (protégées par mot de passe + JWT) écrivent en base via le même utilisateur MySQL — s'il n'a que `SELECT`, il faut élargir ses droits :
-> ```sql
-> GRANT SELECT, INSERT, UPDATE, DELETE ON rer_e_stats.trains     TO 'rer_e_readonly'@'localhost';
-> GRANT SELECT, INSERT, UPDATE, DELETE ON rer_e_stats.train_sets TO 'rer_e_readonly'@'localhost';
-> ```
-> CORS fail-closed : sans `CORS_ORIGIN`, toute requête cross-origin est refusée.
 
 ---
+
+## Prérequis
+
+- Node.js ≥ 18
+- MySQL ≥ 8.0 (ou MariaDB ≥ 10.4)
 
 ## Lancement
 
@@ -395,3 +400,9 @@ Il effectue dans l'ordre :
 **Le redémarrage des process n'est pas automatisé** — après le script, redémarrer manuellement le collecteur et l'API depuis l'interface aaPanel (NodeJS → sélectionner le site → Restart).
 
 `collector/.env` et `api/.env` doivent contenir les valeurs de production — voir [Configuration](#configuration).
+
+---
+
+## Licence
+
+[MIT](LICENSE) — libre de réutilisation, modification et redistribution.
