@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, reactive, computed } from "vue";
 import TrainDetailPanel from "./TrainDetailPanel.vue";
 
 const props = defineProps({ trains: Array, date: String });
@@ -15,6 +15,10 @@ const BRANCH_LABELS = {
   Villiers: "Villiers-sur-Marne",
   Central:  "Tronçon central",
 };
+
+// Repliées par défaut.
+const collapsed = reactive(Object.fromEntries(BRANCH_ORDER.map((k) => [k, true])));
+function toggleBranch(key) { collapsed[key] = !collapsed[key]; }
 
 const byBranch = computed(() => {
   const groups = {};
@@ -49,7 +53,8 @@ const byBranch = computed(() => {
   />
   <div class="tl-root">
     <div v-for="grp in byBranch" :key="grp.key" class="tl-section">
-      <div class="tl-head">
+      <div class="tl-head" @click="toggleBranch(grp.key)" role="button">
+        <span class="tl-head-chevron" :class="{ 'is-collapsed': collapsed[grp.key] }">▾</span>
         <span class="tl-head-label">{{ grp.label }}</span>
         <div class="tl-head-right">
           <span v-if="grp.canceled"  class="tl-head-tag is-canceled">{{ grp.canceled }} supprimé{{ grp.canceled > 1 ? 's' : '' }}</span>
@@ -58,7 +63,7 @@ const byBranch = computed(() => {
           <span class="tl-head-count">{{ grp.outbound.length + grp.inbound.length }} trains</span>
         </div>
       </div>
-      <div class="tl-columns">
+      <div class="tl-columns" v-show="!collapsed[grp.key]">
 
         <div class="tl-col">
           <div class="tl-col-head is-out">→ {{ grp.short }}</div>
@@ -118,14 +123,23 @@ const byBranch = computed(() => {
 .tl-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--panel2);
+  cursor: pointer;
+  user-select: none;
 }
+.tl-head-chevron {
+  font-size: 18px;
+  color: var(--dim);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.tl-head-chevron.is-collapsed { transform: rotate(-90deg); }
 .tl-head-label { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; color: var(--fg); letter-spacing: 0.02em; }
-.tl-head-right { display: flex; align-items: center; gap: 8px; }
+.tl-head-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .tl-head-count { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--faint); }
 .tl-head-tag {
   font-family: "IBM Plex Mono", monospace;
