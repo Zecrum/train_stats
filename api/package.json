@@ -1,5 +1,5 @@
 {
-  "name": "rer-e-dashboard-api",
+  "name": "train-stats-api",
   "version": "1.0.0",
   "description": "API REST lecture seule — statistiques de composition RER E",
   "type": "commonjs",

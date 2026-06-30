@@ -193,7 +193,7 @@ const evoStats = computed(() => {
       <header class="db-top">
         <div class="db-brand">
           <span class="db-tag">RER&nbsp;E</span>
-          <span class="db-title">Transilien Stats</span>
+          <span class="db-title">Train Stats</span>
         </div>
         <div class="db-top-right">
           <DatePicker v-model="date" />

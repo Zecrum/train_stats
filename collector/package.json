@@ -1,5 +1,5 @@
 {
-  "name": "transilien-stats",
+  "name": "train-stats-collector",
   "version": "1.0.0",
   "description": "Collecte automatique de la composition des trains du RER E",
   "main": "index.js",

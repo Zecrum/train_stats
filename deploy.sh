@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /www/wwwroot/sites/train-stats.zecrum.fr
+cd /www/wwwroot/sites/trainstats.fr
 git pull origin main
 cd collector && npm install
 cd ../api && npm install

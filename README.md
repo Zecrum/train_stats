@@ -1,10 +1,10 @@
-# Transilien Stats
+# Train Stats
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques de composition du matériel roulant.
 
-**Démo en ligne :** [train-stats.zecrum.fr](https://train-stats.zecrum.fr)
+**Démo en ligne :** [trainstats.fr](https://trainstats.fr)
 
 > Projet personnel et non-officiel, sans lien avec la SNCF. Les données affichées proviennent d'API publiques non-documentées de SNCF Connect/Voyageurs/Transilien — voir la page **Mentions légales** du dashboard pour le détail.
 
