@@ -15,7 +15,7 @@ function matTotal(b) { return b.material.RERNG + b.material.NAT + b.material.MI2
 
 <template>
   <section class="db-panel">
-    <div class="db-panel-h">// détail par branche</div>
+    <div class="db-panel-h">détail par branche</div>
     <div class="db-branchgrid">
       <div v-for="b in list" :key="b.label" class="db-branch">
         <div class="db-branch-head">

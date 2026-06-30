@@ -39,7 +39,7 @@ const options = computed(() => ({
 
 <template>
   <div class="db-panel">
-    <div class="db-panel-h">// répartition matériel</div>
+    <div class="db-panel-h">répartition matériel</div>
     <div class="db-donutwrap">
       <div class="db-donut-canvas">
         <Doughnut :data="chartData" :options="options" />

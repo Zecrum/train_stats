@@ -253,9 +253,8 @@ const evoStats = computed(() => {
       <!-- ===== Vue Trains ===== -->
       <template v-else-if="view === 'trains' && trainsDay">
         <section class="db-panel">
-          <div class="db-panel-h">// trains du jour · par branche · heure de départ</div>
+          <div class="db-panel-h">trains du jour · par branche · heure de départ</div>
           <TrainList :trains="trainsDay" :date="date" />
-          <div class="db-foot-note">/api/stats/trains-day · trains avec équipement résolu · source SNCF Connect pour perturbations</div>
         </section>
       </template>
 
@@ -272,7 +271,7 @@ const evoStats = computed(() => {
         </section>
         <section class="db-panel db-chartcard">
           <div class="db-panel-h">
-            // matériel par heure
+            matériel par heure
             <span class="db-ph-right">
               <span class="db-period">
                 <button :class="{ 'is-active': branchFilter === null }" @click="branchFilter = null">Toutes</button>
@@ -281,17 +280,14 @@ const evoStats = computed(() => {
             </span>
           </div>
           <HourlyChart :hourly="hourly" />
-          <div class="db-foot-note">/api/stats/hourly{{ branchFilter ? '?branch=' + branchFilter : '' }} · trains en circulation par tranche de 15 min (status = ok)</div>
         </section>
         <section class="db-panel db-chartcard" style="margin-top:14px" v-if="hourlyDisruptions?.length">
-          <div class="db-panel-h">// perturbations dans la journée</div>
+          <div class="db-panel-h">perturbations dans la journée</div>
           <HourlyDisruptionChart :data="hourlyDisruptions" />
-          <div class="db-foot-note">/api/stats/hourly-disruptions · par heure de départ · source SNCF Connect</div>
         </section>
         <section class="db-panel db-chartcard" style="margin-top:14px" v-if="hourlyDisruptions?.some(r => r.total_delay > 0)">
-          <div class="db-panel-h">// retard cumulé dans la journée</div>
+          <div class="db-panel-h">retard cumulé dans la journée</div>
           <HourlyTotalDelayChart :data="hourlyDisruptions" />
-          <div class="db-foot-note">/api/stats/hourly-disruptions · somme des retards par tranche · source SNCF Connect</div>
         </section>
       </template>
 
@@ -299,7 +295,7 @@ const evoStats = computed(() => {
       <template v-else-if="view === 'evolution' && evolution && evoStats">
         <section class="db-panel">
           <div class="db-panel-h">
-            // évolution sur période glissante
+            évolution sur période glissante
             <span class="db-ph-right">
               <span class="db-period">
                 <button v-for="p in [7, 30, 90]" :key="p" :class="{ 'is-active': period === p }" @click="period = p">{{ p }} j</button>
@@ -328,7 +324,6 @@ const evoStats = computed(() => {
             </div>
           </div>
           <EvolutionChart :evolution="evolution" />
-          <div class="db-foot-note">/api/stats/evolution?days={{ period }} · {{ evoStats.n }} points journaliers</div>
         </section>
       </template>
 
@@ -352,14 +347,13 @@ const evoStats = computed(() => {
         </section>
 
         <section class="db-panel db-chartcard" v-if="disruptions?.evolution">
-          <div class="db-panel-h">// taux de perturbation par jour</div>
+          <div class="db-panel-h">taux de perturbation par jour</div>
           <DisruptionChart :evolution="disruptions.evolution" />
-          <div class="db-foot-note">/api/stats/disruptions?days={{ period }} · {{ disruptionStats?.n || 0 }} jours · source SNCF Connect/Voyageurs</div>
         </section>
 
         <div class="db-row2">
           <section class="db-panel">
-            <div class="db-panel-h">// distribution des retards (période)</div>
+            <div class="db-panel-h">distribution des retards (période)</div>
             <div v-if="distribBuckets.some(b => b.count > 0)" class="db-distrib">
               <div class="db-distrib-row" v-for="b in distribBuckets" :key="b.key">
                 <span class="db-distrib-label">{{ b.label }}</span>
@@ -370,7 +364,7 @@ const evoStats = computed(() => {
             <p v-else class="db-loading">Aucun retard sur la période</p>
           </section>
           <section class="db-panel">
-            <div class="db-panel-h">// arrêts les plus touchés par les retards</div>
+            <div class="db-panel-h">arrêts les plus touchés par les retards</div>
             <div v-if="disruptions.stations.length" class="db-stations">
               <div class="db-station-row" v-for="(s, i) in disruptions.stations" :key="s.station">
                 <span class="db-station-rank">{{ i + 1 }}.</span>
@@ -386,7 +380,7 @@ const evoStats = computed(() => {
         <!-- Jour de semaine + Branche -->
         <div class="db-row2">
           <section class="db-panel">
-            <div class="db-panel-h">// ponctualité par jour de semaine</div>
+            <div class="db-panel-h">ponctualité par jour de semaine</div>
             <div v-if="byWeekday.length" class="db-breakdown">
               <div class="db-bk-row" v-for="r in byWeekday" :key="r.label">
                 <span class="db-bk-label" :title="r.label">{{ r.label }}</span>
@@ -398,7 +392,7 @@ const evoStats = computed(() => {
             <p v-else class="db-loading">Aucune donnée</p>
           </section>
           <section class="db-panel">
-            <div class="db-panel-h">// ponctualité par branche</div>
+            <div class="db-panel-h">ponctualité par branche</div>
             <div v-if="byBranch.length" class="db-breakdown">
               <div class="db-bk-row" v-for="r in byBranch" :key="r.label">
                 <span class="db-bk-label" :title="r.label">{{ r.label }}</span>

@@ -143,7 +143,7 @@ body { background: #0d1117; }
 
 /* ---------- panels & generic ---------- */
 .db-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 16px 18px; }
-.db-panel-h { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--faint); margin-bottom: 14px; letter-spacing: .4px; }
+.db-panel-h { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; margin-bottom: 14px; letter-spacing: .6px; }
 .db-panel-h .db-ph-right { color: var(--dim); float: right; }
 
 /* metrics strip */
@@ -233,7 +233,6 @@ body { background: #0d1117; }
 .db-chartpos { position: relative; }
 .db-chartbox { position: relative; height: 320px; width: 100%; }
 .db-chartbox canvas { max-width: 100%; }
-.db-foot-note { font-size: 11px; color: var(--faint); font-family: "IBM Plex Mono", monospace; margin-top: 14px; }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
@@ -266,5 +265,4 @@ body { background: #0d1117; }
   .db-period button { padding: 8px 11px; font-size: 12px; }
   .db-evo-stats { gap: 16px; }
   .db-branch-name { font-size: 13px; }
-  .db-foot-note { word-break: break-all; }
 }
