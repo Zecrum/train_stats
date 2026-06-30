@@ -34,7 +34,7 @@ router.post("/login", loginLimiter, (req, res) => {
   if (!password || !timingSafeEqualStr(password, process.env.ADMIN_PASSWORD || "")) {
     return res.status(401).json({ error: "invalid_credentials" });
   }
-  const token = jwt.sign({ role: "admin" }, process.env.ADMIN_JWT_SECRET, { expiresIn: "12h" });
+  const token = jwt.sign({ role: "admin" }, process.env.ADMIN_JWT_SECRET, { expiresIn: "30d" });
   res.json({ token });
 });
 
