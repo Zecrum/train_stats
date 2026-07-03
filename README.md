@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques de composition du matériel roulant.
+Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques du RER E : matériel roulant (RER NG, NAT, MI2N), retards, suppressions et modifications.
 
 **Démo en ligne :** [trainstats.fr](https://trainstats.fr)
 
@@ -384,7 +384,7 @@ Le tag `v1.1.0` sert de point de repère sur GitHub — utile pour créer une **
 
 ## Déploiement (aaPanel)
 
-Le site Node.js est géré via le plugin **Node项目管理器** (Node Project Manager) d'aaPanel.
+Le site Node.js est géré via le plugin **Node** (Node Project Manager) d'aaPanel.
 
 Le script `deploy.sh` à la racine automatise le pull et le build sur le VPS :
 
