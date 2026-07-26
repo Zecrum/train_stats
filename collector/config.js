@@ -29,6 +29,14 @@ module.exports = {
     { label: 'Chelles → Paris Est',  departure: 'stop_area:IDFM:68407',  destination: 'stop_area:IDFM:71359', missions: ['POCI'] },
     { label: 'Paris Est → Villiers', departure: 'stop_area:IDFM:71359',  destination: 'stop_area:IDFM:73097', missions: ['VOPE'] },
     { label: 'Villiers → Paris Est', departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:71359', missions: ['POVE'] },
+
+    // Travaux — trains au départ de Haussmann Saint-Lazare
+    { label: 'Haussmann → Tournan',  departure: 'stop_area:IDFM:73688',  destination: 'stop_area:IDFM:67625',  missions: ['TAVA', 'TUVA'] },
+    { label: 'Tournan → Haussmann',  departure: 'stop_area:IDFM:67625',  destination: 'stop_area:IDFM:73688',  missions: ['HAVA', 'HUVA'] },
+    { label: 'Haussmann → Chelles',  departure: 'stop_area:IDFM:73688',  destination: 'stop_area:IDFM:68407',  missions: ['COHI'] },
+    { label: 'Chelles → Haussmann',  departure: 'stop_area:IDFM:68407',  destination: 'stop_area:IDFM:73688',  missions: ['HOCI'] },
+    { label: 'Magenta → Villiers',   departure: 'stop_area:IDFM:478733', destination: 'stop_area:IDFM:73097',  missions: ['VONE'] },
+    { label: 'Villiers → Magenta',   departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:478733', missions: ['NOVE'] },
   ],
   scheduler: {
     delayAfterDeparture: 5,

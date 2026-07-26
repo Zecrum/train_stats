@@ -52,12 +52,12 @@ Toutes les vues sont filtrables par date (calendrier ou flèches jour-par-jour).
 
 **Branches couvertes :**
 
-| Branche | Missions |
-|---------|----------|
-| Chelles-Gournay | `NOCY`, `CONY` |
-| Tournan | `NATU`, `NUTU`, `TANU`, `TINU` |
-| Villiers-sur-Marne | `NOVY`, `VONY` |
-| Tronçon central | `NOMY`, `MONY` |
+| Branche | Missions normales | Missions travaux |
+|---------|-------------------|-----------------|
+| Chelles-Gournay | `NOCY`, `CONY` | `COPI`, `CIPI`, `POCI` (Paris Est) · `COHI`, `HOCI` (Haussmann) |
+| Tournan | `NATU`, `NUTU`, `TANU`, `TINU` | `TAPA`, `TOPU`, `PAVU` (Paris Est) · `TAVA`, `TUVA`, `HAVA` (Haussmann) |
+| Villiers-sur-Marne | `NOVY`, `VONY` | `VOPE`, `POVE` (Paris Est) · `VONE`, `NOVE` (Magenta) |
+| Tronçon central | `NOMY`, `MONY` | — |
 
 ### Vue "Répartition horaire"
 

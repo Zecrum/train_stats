@@ -6,13 +6,13 @@ const router = express.Router();
 
 // Source unique pour les branches — BRANCH_CASE, KNOWN_MISSIONS, BRANCH_MISSIONS et BRANCHES en sont dérivés.
 // outbound = missions partant de Paris (Haussmann) vers le terminus de branche.
-// TAPA/TOPU/PAVU, COPI/CIPI/POCI, VOPE/POVE = trains détournés via Paris Est pendant
-// les travaux (ne desservent pas Nanterre/Magenta) — rattachés à leur branche habituelle.
+// TAPA/TOPU/PAVU, COPI/CIPI/POCI, VOPE/POVE = trains détournés via Paris Est pendant travaux.
+// TAVA/HAVA, COHI/HOCI, VONE/NOVE = trains au départ de Haussmann/Magenta pendant travaux.
 const BRANCH_DEF = [
-  { key: "Chelles",  label: "Chelles–Gournay",    short: "Chelles",  outbound: ["NOCY","COPI","CIPI"],        missions: ["NOCY","CONY","COPI","CIPI","POCI"]               },
-  { key: "Tournan",  label: "Tournan",             short: "Tournan",  outbound: ["NATU","NUTU","TAPA","TOPU"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU"]  },
-  { key: "Villiers", label: "Villiers-sur-Marne",  short: "Villiers", outbound: ["NOVY","VOPE"],                missions: ["NOVY","VONY","VOPE","POVE"]                       },
-  { key: "Central",  label: "Tronçon central",     short: "Central",  outbound: ["NOMY"],               missions: ["NOMY","MONY"]                             },
+  { key: "Chelles",  label: "Chelles–Gournay",   short: "Chelles",  outbound: ["NOCY","COPI","CIPI","COHI"],        missions: ["NOCY","CONY","COPI","CIPI","POCI","COHI","HOCI"]              },
+  { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["NATU","NUTU","TAPA","TOPU","TAVA","TUVA"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA"] },
+  { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["NOVY","VOPE","VONE"],               missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE"]                     },
+  { key: "Central",  label: "Tronçon central",    short: "Central",  outbound: ["NOMY"],                            missions: ["NOMY","MONY"]                                                 },
 ];
 // Table mission → { direction: 'outbound'|'inbound', branchShort }
 const MISSION_DIR = {};
