@@ -17,8 +17,8 @@ module.exports = {
     { label: 'Nanterre → Chelles',  departure: 'stop_area:IDFM:488087', destination: 'stop_area:IDFM:68407',  missions: ['CONY'] },
     { label: 'Tournan → Nanterre',  departure: 'stop_area:IDFM:67625',  destination: 'stop_area:IDFM:488087', missions: ['NATU', 'NUTU'] },
     { label: 'Nanterre → Tournan',  departure: 'stop_area:IDFM:488087', destination: 'stop_area:IDFM:67625',  missions: ['TANU', 'TINU'] },
-    { label: 'Villiers → Nanterre', departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:488087', missions: ['NOVY'] },
-    { label: 'Nanterre → Villiers', departure: 'stop_area:IDFM:488087', destination: 'stop_area:IDFM:73097',  missions: ['VONY'] },
+    { label: 'Villiers → Nanterre', departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:488087', missions: ['NOVY', 'NOPI'] },
+    { label: 'Nanterre → Villiers', departure: 'stop_area:IDFM:488087', destination: 'stop_area:IDFM:73097',  missions: ['VONY', 'VOPI', 'TONU'] },
     { label: 'Magenta → Nanterre',  departure: 'stop_area:IDFM:478733', destination: 'stop_area:IDFM:488087', missions: ['NOMY'] },
     { label: 'Nanterre → Magenta',  departure: 'stop_area:IDFM:488087', destination: 'stop_area:IDFM:478733', missions: ['MONY'] },
 

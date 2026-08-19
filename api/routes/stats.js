@@ -11,7 +11,7 @@ const router = express.Router();
 const BRANCH_DEF = [
   { key: "Chelles",  label: "Chelles–Gournay",   short: "Chelles",  outbound: ["NOCY","COPI","CIPI","COHI"],        missions: ["NOCY","CONY","COPI","CIPI","POCI","COHI","HOCI"]              },
   { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["NATU","NUTU","TAPA","TOPU","TAVA","TUVA"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA"] },
-  { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["NOVY","VOPE","VONE"],               missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE"]                     },
+  { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["NOVY","VOPE","VONE","NOPI","TONU"],          missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE","NOPI","VOPI","TONU"]              },
   { key: "Central",  label: "Tronçon central",    short: "Central",  outbound: ["NOMY"],                            missions: ["NOMY","MONY"]                                                 },
 ];
 // Table mission → { direction: 'outbound'|'inbound', branchShort }

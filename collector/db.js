@@ -124,6 +124,17 @@ async function initDb() {
     )
   `);
 
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS unknown_missions (
+      mission    VARCHAR(10)  NOT NULL,
+      entryLabel VARCHAR(100),
+      seenCount  INT          NOT NULL DEFAULT 1,
+      firstSeen  DATE         NOT NULL,
+      lastSeen   DATE         NOT NULL,
+      PRIMARY KEY (mission)
+    )
+  `);
+
   logger.info('Tables prêtes');
 }
 
@@ -305,6 +316,18 @@ async function markDetailUnknown(trainNumber, date, retries) {
   );
 }
 
+async function saveUnknownMission(mission, entryLabel, date) {
+  await pool.execute(
+    `INSERT INTO unknown_missions (mission, entryLabel, seenCount, firstSeen, lastSeen)
+     VALUES (?, ?, 1, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       seenCount  = seenCount + 1,
+       entryLabel = VALUES(entryLabel),
+       lastSeen   = VALUES(lastSeen)`,
+    [mission, entryLabel, date, date]
+  );
+}
+
 module.exports = {
   initDb, insertTrain,
   getPendingEquipmentTrains, getPendingDetailTrains,
@@ -312,4 +335,5 @@ module.exports = {
   saveEquipment, saveDetail,
   scheduleEquipmentRetry, markEquipmentUnknown,
   scheduleDetailRetry, markDetailUnknown,
+  saveUnknownMission,
 };

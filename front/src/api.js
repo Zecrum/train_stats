@@ -28,6 +28,17 @@ async function getAuth(path, params = {}) {
   return res.json();
 }
 
+async function del(path, { auth = false } = {}) {
+  const headers = {};
+  if (auth) {
+    const token = getAdminToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status} sur ${path}`);
+  return res.json();
+}
+
 async function post(path, body, { auth = false } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (auth) {
@@ -51,8 +62,10 @@ export const api = {
   admin: {
     login:          (password)          => post("/admin/login", { password }),
     unresolved:     (date)              => getAuth("/admin/unresolved", { date }),
-    retryEquipment: (trainNumber, date) => post("/admin/retry-equipment", { trainNumber, date }, { auth: true }),
-    retryDetail:    (trainNumber, date) => post("/admin/retry-detail", { trainNumber, date }, { auth: true }),
-    setEquipment:   (payload)           => post("/admin/equipment", payload, { auth: true }),
+    retryEquipment:   (trainNumber, date) => post("/admin/retry-equipment", { trainNumber, date }, { auth: true }),
+    retryDetail:      (trainNumber, date) => post("/admin/retry-detail", { trainNumber, date }, { auth: true }),
+    setEquipment:     (payload)           => post("/admin/equipment", payload, { auth: true }),
+    unknownMissions:  ()                  => getAuth("/admin/unknown-missions"),
+    dismissMission:   (mission)           => del(`/admin/unknown-missions/${mission}`, { auth: true }),
   },
 };

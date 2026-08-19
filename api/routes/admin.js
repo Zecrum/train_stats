@@ -170,4 +170,28 @@ router.post("/equipment", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* -------------------------------------------------------------------------- */
+/* GET /api/admin/unknown-missions                                             */
+/* -------------------------------------------------------------------------- */
+router.get("/unknown-missions", async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT mission, entryLabel, seenCount, firstSeen, lastSeen
+       FROM unknown_missions
+       ORDER BY lastSeen DESC, seenCount DESC`
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+/* -------------------------------------------------------------------------- */
+/* DELETE /api/admin/unknown-missions/:mission                                 */
+/* -------------------------------------------------------------------------- */
+router.delete("/unknown-missions/:mission", async (req, res, next) => {
+  try {
+    await pool.execute(`DELETE FROM unknown_missions WHERE mission = ?`, [req.params.mission]);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

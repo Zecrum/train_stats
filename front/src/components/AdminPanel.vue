@@ -74,6 +74,7 @@ const rows = ref([]);
 const loading = ref(false);
 const error = ref("");
 const daily = ref(null);
+const unknownMissions = ref([]);
 
 watch(dateFilter, load);
 
@@ -93,17 +94,26 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [unresolved, d] = await Promise.all([
+    const [unresolved, d, um] = await Promise.all([
       api.admin.unresolved(dateFilter.value || undefined),
       api.daily(dateFilter.value),
+      api.admin.unknownMissions(),
     ]);
     rows.value = unresolved;
     daily.value = d;
+    unknownMissions.value = um;
   } catch (e) {
     handleApiError(e);
   } finally {
     loading.value = false;
   }
+}
+
+async function dismissMission(mission) {
+  try {
+    await api.admin.dismissMission(mission);
+    unknownMissions.value = unknownMissions.value.filter(m => m.mission !== mission);
+  } catch (e) { handleApiError(e); }
 }
 
 async function retryEquipment(r) {
@@ -241,6 +251,27 @@ watch(isAuthenticated, (v) => { if (v) load(); });
           </table>
         </div>
 
+        <section v-if="unknownMissions.length" class="adm-unknown">
+          <div class="db-panel-h" style="margin-top:24px">missions inconnues détectées</div>
+          <div class="adm-table-wrap">
+            <table class="adm-table">
+              <thead>
+                <tr><th>Mission</th><th>Branche probable</th><th>Vues</th><th>Première fois</th><th>Dernière fois</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in unknownMissions" :key="m.mission">
+                  <td><strong style="color:var(--text)">{{ m.mission }}</strong></td>
+                  <td>{{ m.entryLabel }}</td>
+                  <td>{{ m.seenCount }}</td>
+                  <td>{{ m.firstSeen }}</td>
+                  <td>{{ m.lastSeen }}</td>
+                  <td><button @click="dismissMission(m.mission)" title="Supprimer une fois ajoutée dans config.js">✓ Ignorer</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <div
           v-if="linkPopFor"
           class="adm-link-pop"
@@ -320,11 +351,11 @@ watch(isAuthenticated, (v) => { if (v) load(); });
   font-family: "IBM Plex Mono", monospace; font-size: 13px; padding: 9px 12px;
   border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); color: var(--text);
 }
-.adm-login button, .adm-toolbar button, .adm-actions button, .adm-modal-actions button {
+.adm-login button, .adm-toolbar button, .adm-actions button, .adm-modal-actions button, .adm-unknown button {
   font-family: "IBM Plex Mono", monospace; font-size: 12px; padding: 8px 14px;
   border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); color: var(--text); cursor: pointer;
 }
-.adm-login button:hover, .adm-toolbar button:hover, .adm-actions button:hover { border-color: var(--dim); }
+.adm-login button:hover, .adm-toolbar button:hover, .adm-actions button:hover, .adm-unknown button:hover { border-color: var(--dim); }
 
 .v-canceled { color: var(--c-canceled); }
 
