@@ -36,7 +36,7 @@ module.exports = {
     { label: 'Haussmann → Chelles',  departure: 'stop_area:IDFM:73688',  destination: 'stop_area:IDFM:68407',  missions: ['COHI'] },
     { label: 'Chelles → Haussmann',  departure: 'stop_area:IDFM:68407',  destination: 'stop_area:IDFM:73688',  missions: ['HOCI'] },
     { label: 'Magenta → Villiers',   departure: 'stop_area:IDFM:478733', destination: 'stop_area:IDFM:73097',  missions: ['VONE'] },
-    { label: 'Villiers → Magenta',   departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:478733', missions: ['NOVE'] },
+    { label: 'Villiers → Magenta',   departure: 'stop_area:IDFM:73097',  destination: 'stop_area:IDFM:478733', missions: ['NOVE', 'NOTU'] },
   ],
   scheduler: {
     delayAfterDeparture: 5,
