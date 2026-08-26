@@ -12,11 +12,6 @@ const ROLLING_STOCK_MAP = {
   'Francilien':'NAT',
 };
 
-function timeToMinutes(t) {
-  if (!t) return 0;
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
 
 // Extrait HH:MM:SS depuis un timestamp ISO ou laisse HH:MM tel quel
 function extractTime(dt) {

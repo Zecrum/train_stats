@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { api } from "./api.js";
-import { TODAY, fmtLong, pct } from "./utils.js";
+import { TODAY, pct } from "./utils.js";
 import { useTheme } from "./composables/useTheme.js";
 
 import DatePicker from "./components/DatePicker.vue";

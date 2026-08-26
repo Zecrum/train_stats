@@ -7,7 +7,9 @@
   "license": "MIT",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "lint": "eslint .",
+    "test": "node --test"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -16,5 +18,11 @@
     "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.11.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "supertest": "^7.0.0"
   }
 }
