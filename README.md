@@ -1,5 +1,6 @@
 # Train Stats
 
+[![CI](https://github.com/Zecrum/train_stats/actions/workflows/ci.yml/badge.svg)](https://github.com/Zecrum/train_stats/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Monorepo regroupant le collecteur de données RER E (cron Node.js), l'API REST de lecture et le dashboard Vue.js de visualisation des statistiques du RER E : matériel roulant (RER NG, NAT, MI2N), retards, suppressions et modifications.
@@ -332,6 +333,20 @@ npm run dev
 
 > Le collecteur et l'API sont des process long-running — en production, les superviser avec PM2 ou un service systemd pour qu'ils redémarrent automatiquement en cas de crash.  
 > Builder le front avec `npm run build` et servir `dist/` via Nginx ou Express.
+
+---
+
+## Qualité / CI
+
+Chaque sous-projet a son propre linter (ESLint) et ses tests :
+
+```bash
+cd collector  # ou api, ou front
+npm run lint   # ESLint
+npm test       # node --test (collector, api) ou Vitest (front)
+```
+
+Le workflow GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) lance ces commandes (+ `npm run build` pour le front) sur chaque push/PR vers `main` et `dev`, en 3 jobs indépendants (un par sous-projet).
 
 ---
 
