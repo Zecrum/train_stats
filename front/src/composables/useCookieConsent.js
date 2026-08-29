@@ -17,7 +17,9 @@ export function useCookieConsent() {
   const decided = computed(() => decision.value === "accepted" || decision.value === "refused");
 
   function accept() {
-    window._paq?.push(["setConsentGiven"]);
+    // rememberConsentGiven (pas setConsentGiven, qui ne vaut que pour ce chargement
+    // de page) pose le cookie mtm_consent — c'est lui qui persiste le consentement.
+    window._paq?.push(["rememberConsentGiven"]);
     decision.value = "accepted";
   }
 
