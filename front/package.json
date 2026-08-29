@@ -14,7 +14,8 @@
   "dependencies": {
     "chart.js": "^4.4.4",
     "vue": "^3.4.38",
-    "vue-chartjs": "^5.3.1"
+    "vue-chartjs": "^5.3.1",
+    "vue-matomo": "^4.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

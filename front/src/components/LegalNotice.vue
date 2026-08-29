@@ -1,5 +1,13 @@
 <script setup>
+import { useCookieConsent } from "../composables/useCookieConsent.js";
+
 const emit = defineEmits(["close"]);
+const { decision, reset } = useCookieConsent();
+
+function reopenBanner() {
+  reset();
+  emit("close");
+}
 </script>
 
 <template>
@@ -50,12 +58,29 @@ const emit = defineEmits(["close"]);
         </section>
 
         <section>
-          <h3>Données personnelles</h3>
+          <h3>Données personnelles et cookies</h3>
           <p>
-            Le site ne dépose aucun cookie et ne collecte aucune donnée personnelle des
-            visiteurs (pas de compte utilisateur, pas de suivi, pas d'outil d'analyse
-            d'audience). Un accès administrateur protégé par mot de passe existe pour la
-            gestion interne des données de collecte ; il n'est pas accessible au public.
+            Ce site utilise <strong>Matomo</strong>, un outil de mesure d'audience
+            auto-hébergé sur un serveur que j'administre moi-même — aucune donnée n'est
+            transmise à un tiers (pas de Google Analytics, ni régie publicitaire).
+            Matomo dépose un cookie sur votre navigateur pour reconnaître vos visites et
+            peut conserver votre adresse IP. Ces données servent uniquement à comprendre
+            la fréquentation du site et ne sont ni revendues, ni croisées avec d'autres
+            fichiers, ni utilisées à des fins publicitaires.
+          </p>
+          <p>
+            Un bandeau vous demande votre consentement avant tout dépôt de cookie ; aucun
+            suivi n'a lieu tant que vous n'avez pas cliqué sur « Accepter ». Pour cette
+            visite, vous avez
+            <strong>{{ decision === "accepted" ? "accepté" : decision === "refused" ? "refusé" : "pas encore répondu à" }}</strong>
+            ce suivi — un refus n'est pas mémorisé, le bandeau réapparaît à chaque
+            nouvelle visite tant que vous n'acceptez pas.
+            <button class="lgl-inline-btn" @click="reopenBanner">Changer mon choix</button>
+          </p>
+          <p>
+            Un accès administrateur protégé par mot de passe existe par ailleurs pour la
+            gestion interne des données de collecte ferroviaire ; il n'est pas accessible
+            au public.
           </p>
         </section>
 
@@ -99,4 +124,8 @@ const emit = defineEmits(["close"]);
 .lgl-body p { font-size: 13px; line-height: 1.6; color: var(--dim); margin: 0 0 6px; }
 .lgl-body a { color: var(--brand); text-decoration: none; }
 .lgl-body a:hover { text-decoration: underline; }
+.lgl-inline-btn {
+  background: none; border: none; padding: 0; margin-left: 2px;
+  font: inherit; font-size: 13px; color: var(--brand); text-decoration: underline; cursor: pointer;
+}
 </style>

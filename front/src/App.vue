@@ -17,6 +17,7 @@ import DisruptionBar from "./components/DisruptionBar.vue";
 import DisruptionChart from "./components/DisruptionChart.vue";
 import AdminPanel from "./components/AdminPanel.vue";
 import LegalNotice from "./components/LegalNotice.vue";
+import CookieBanner from "./components/CookieBanner.vue";
 
 const { theme, toggle } = useTheme();
 const showAdmin = ref(false);
@@ -206,6 +207,7 @@ const evoStats = computed(() => {
 
       <AdminPanel v-if="showAdmin" @close="showAdmin = false" />
       <LegalNotice v-if="showLegal" @close="showLegal = false" />
+      <CookieBanner @legal="showLegal = true" />
 
       <nav class="db-tabs">
         <div class="db-tabgroup">
