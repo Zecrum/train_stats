@@ -7,11 +7,12 @@ const router = express.Router();
 // Source unique pour les branches — BRANCH_CASE, KNOWN_MISSIONS, BRANCH_MISSIONS et BRANCHES en sont dérivés.
 // outbound = missions partant de Paris (Haussmann) vers le terminus de branche.
 // TAPA/TOPU/PAVU, COPI/CIPI/POCI, VOPE/POVE = trains détournés via Paris Est pendant travaux.
-// TAVA/HAVA, COHI/HOCI, VONE/NOVE/NOTU = trains au départ de Haussmann/Magenta pendant travaux.
+// TAVA/HAVA, COHI/HOCI, VONE/NOVE = trains au départ de Haussmann/Magenta pendant travaux.
+// TONU/NOTU = trains Tournan détournés via Villiers/Magenta pendant travaux.
 const BRANCH_DEF = [
   { key: "Chelles",  label: "Chelles–Gournay",   short: "Chelles",  outbound: ["NOCY","COPI","CIPI","COHI"],        missions: ["NOCY","CONY","COPI","CIPI","POCI","COHI","HOCI"]              },
-  { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["NATU","NUTU","TAPA","TOPU","TAVA","TUVA"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA"] },
-  { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["NOVY","VOPE","VONE","NOPI","TONU"],          missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE","NOPI","VOPI","TONU","NOTU"]              },
+  { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["NATU","NUTU","TAPA","TOPU","TAVA","TUVA","TONU"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA","TONU","NOTU"] },
+  { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["NOVY","VOPE","VONE","NOPI"],          missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE","NOPI","VOPI"]              },
   { key: "Central",  label: "Tronçon central",    short: "Central",  outbound: ["NOMY"],                            missions: ["NOMY","MONY"]                                                 },
 ];
 // Table mission → { direction: 'outbound'|'inbound', branchShort }
