@@ -6,14 +6,11 @@ import "./style.css";
 
 const app = createApp(App);
 
-// Pas de vue-router ici (navigation par onglets en état local) — trackInitialView
-// (par défaut) suffit à compter la visite. Désactivé hors trainstats.fr pour ne
-// pas polluer les stats avec les sessions de dev local.
+// Désactivé hors trainstats.fr pour ne pas polluer les stats avec les sessions de dev local.
 if (location.hostname.endsWith("trainstats.fr")) {
-  // "requireConsent" doit être poussé dans _paq AVANT que vue-matomo n'y ajoute
-  // trackPageView, sinon ce premier appel partirait sans consentement. Le bandeau
-  // (CookieBanner.vue) appelle ensuite setConsentGiven/forgetConsentGiven — voir
-  // composables/useCookieConsent.js.
+  // "requireConsent" doit être poussé dans _paq avant tout trackPageView, sinon ce
+  // premier appel partirait sans consentement. Le bandeau (CookieBanner.vue) appelle
+  // ensuite rememberConsentGiven/forgetConsentGiven — voir composables/useCookieConsent.js.
   window._paq = window._paq || [];
   window._paq.push(["requireConsent"]);
 
@@ -21,6 +18,12 @@ if (location.hostname.endsWith("trainstats.fr")) {
     host: "https://stats.zecrum.fr/",
     siteId: 1,
   });
+
+  // vue-matomo ne déclenche trackPageView tout seul que via l'option `router`
+  // (vue-router) — sans ça il se contente d'exposer $matomo, sans jamais tracker
+  // la moindre vue. Cette app n'a pas de router (onglets en état local), donc on
+  // déclenche la vue nous-mêmes ; une seule visite par chargement suffit ici.
+  window._paq.push(["trackPageView"]);
 }
 
 app.mount("#app");
