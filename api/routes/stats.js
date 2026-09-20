@@ -8,10 +8,10 @@ const router = express.Router();
 // outbound = missions partant de Paris (Haussmann) vers le terminus de branche.
 // TAPA/TOPU/PAVU, COPI/CIPI/POCI, VOPE/POVE = trains détournés via Paris Est pendant travaux.
 // TAVA/HAVA, COHI/HOCI, VONE/NOVE = trains au départ de Haussmann/Magenta pendant travaux.
-// TONU/NOTU = trains Tournan détournés via Villiers/Magenta pendant travaux.
+// TONU/NOTU, TINC/NATI = trains Tournan détournés via Villiers/Magenta pendant travaux.
 const BRANCH_DEF = [
   { key: "Chelles",  label: "Chelles–Gournay",   short: "Chelles",  outbound: ["CONY","COPI","CIPI","COHI"],        missions: ["NOCY","CONY","COPI","CIPI","POCI","COHI","HOCI"]              },
-  { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["TANU","TINU","TAPA","TOPU","TAVA","TUVA","TONU"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA","TONU","NOTU"] },
+  { key: "Tournan",  label: "Tournan",            short: "Tournan",  outbound: ["TANU","TINU","TAPA","TOPU","TAVA","TUVA","TONU","TINC"], missions: ["NATU","NUTU","TANU","TINU","TAPA","TOPU","PAVU","TAVA","TUVA","HAVA","TONU","NOTU","TINC","NATI"] },
   { key: "Villiers", label: "Villiers-sur-Marne", short: "Villiers", outbound: ["VONY","VOPE","VONE","VOPI"],          missions: ["NOVY","VONY","VOPE","POVE","VONE","NOVE","NOPI","VOPI"]              },
   { key: "Central",  label: "Tronçon central",    short: "Central",  outbound: ["MONY"],                            missions: ["NOMY","MONY"]                                                 },
 ];
